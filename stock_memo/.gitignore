@@ -1,0 +1,7 @@
+.env
+.state.json
+__pycache__/
+*.pyc
+notes/*.md
+notes/*.html
+!notes/.gitkeep
