@@ -43,7 +43,7 @@ def save_to_notion(analysis: Analysis) -> str | None:
             "rich_text": [{"type": "text", "text": {"content": analysis.reason}}]
         },
         "キーワード": {
-            "rich_text": [{"type": "text", "text": {"content": analysis.keywords}}]
+            "multi_select": [{"name": kw.strip()} for kw in analysis.keywords.split("、") if kw.strip()]
         },
         "背景": {
             "rich_text": [{"type": "text", "text": {"content": backgrounds_text[:2000]}}]
