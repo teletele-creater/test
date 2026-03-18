@@ -136,9 +136,8 @@ def analyze_tweet(tweet: Tweet) -> Analysis:
     print(f"  [Claude] 分析中: {tweet.text[:50]}...")
 
     with client.messages.stream(
-        model="claude-opus-4-6",
+        model="claude-sonnet-4-6",
         max_tokens=2048,
-        thinking={"type": "adaptive"},
         system=SYSTEM_PROMPT,
         messages=[
             {"role": "user", "content": _build_analysis_prompt(tweet)}
