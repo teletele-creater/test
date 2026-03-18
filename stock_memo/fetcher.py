@@ -272,6 +272,7 @@ def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
 
         # ツイート要素を取得
         # data-testid="tweet" の中の tweetText を探す
+        print(f"  [DEBUG] 現在のURL: {page.url}")
         article_els = page.query_selector_all('article[data-testid="tweet"]')
         print(f"  [DEBUG] article要素数: {len(article_els)}")
 
@@ -281,6 +282,7 @@ def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
                 pinned_el = article.query_selector('[data-testid="socialContext"]')
                 if pinned_el:
                     ctx_text = pinned_el.inner_text()
+                    print(f"  [DEBUG] socialContext: {ctx_text!r}")
                     if "ピン" in ctx_text or "Pin" in ctx_text:
                         print(f"  [SKIP] 固定ツイート（DOM）をスキップ")
                         continue
