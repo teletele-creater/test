@@ -110,13 +110,13 @@ def fetch_tweets(since_id: Optional[str] = None, max_count: Optional[int] = None
 
         def _on_response(response):
             url = response.url
-            if "x.com" in url and any(k in url for k in ("UserTweets", "UserMedia", "timeline", "TweetDetail")):
+            if "/i/api/graphql/" in url:
+                print(f"  [DEBUG] graphql応答: {url[url.find('/graphql/')+9:][:60]}")
                 try:
                     body = response.json()
                     intercepted.append(body)
-                    print(f"  [DEBUG] XHRキャプチャ: {url[:80]}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"  [DEBUG] JSON解析失敗: {e}")
 
         page = context.new_page()
         page.on("response", _on_response)
@@ -276,15 +276,9 @@ def _fetch_via_dom(url: str, since_id: Optional[str], today_only: bool = True) -
         page = context.new_page()
 
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            page.goto(url, wait_until="networkidle", timeout=30000)
         except PlaywrightTimeout:
             pass
-
-        # article要素が出るまで最大10秒待機
-        try:
-            page.wait_for_selector('article[data-testid="tweet"]', timeout=10000)
-        except Exception:
-            print("  [WARN] article要素の待機タイムアウト")
 
         # スクロールして追加ロード
         for _ in range(4):
