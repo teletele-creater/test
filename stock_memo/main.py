@@ -12,6 +12,19 @@
 import sys
 import argparse
 from pathlib import Path
+from datetime import datetime, timezone, timedelta
+
+
+def get_japanese_greeting() -> str:
+    """現在時刻に応じた日本語の挨拶を返す"""
+    jst = timezone(timedelta(hours=9))
+    hour = datetime.now(jst).hour
+    if 5 <= hour < 11:
+        return "おはようございます！"
+    elif 11 <= hour < 18:
+        return "こんにちは！"
+    else:
+        return "こんばんは！"
 
 
 def run_demo():
@@ -23,7 +36,7 @@ def run_demo():
     from datetime import datetime, timezone
 
     print("=" * 50)
-    print("デモモード: サンプルツイートで動作確認")
+    print(f"{get_japanese_greeting()} デモモード: サンプルツイートで動作確認")
     print("=" * 50)
 
     demo_tweets = [
@@ -71,7 +84,7 @@ def run(fetch_all: bool = False):
     from viewer import generate_html
 
     print("=" * 50)
-    print(f"株価初動メモシステム起動")
+    print(f"{get_japanese_greeting()} 株価初動メモシステム起動")
     print("=" * 50)
 
     # 差分取得（--all フラグがない場合）
