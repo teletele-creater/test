@@ -32,7 +32,8 @@ def _extract_stock_codes(text: str) -> list[str]:
 
 def _is_shodou_alert(text: str) -> bool:
     """【初動検知】企業名（銘柄コード）形式のツイートかどうかを判定する"""
-    return bool(re.match(r'【初動検知】.+[（(]\d{4}[）)]', text))
+    # 4桁数字 または 英数字混在コード（278A等）に対応
+    return bool(re.match(r'【初動検知】.+[（(][\dA-Za-z]{4,5}[）)]', text))
 
 
 def _is_today_jst(dt: datetime) -> bool:
@@ -57,7 +58,7 @@ def _make_id(text: str, timestamp: str) -> str:
     return hashlib.md5(raw.encode()).hexdigest()[:16]
 
 
-def fetch_tweets(since_id: Optional[str] = None, max_count: Optional[int] = None) -> list[Tweet]:
+def fetch_tweets(since_id: Optional[str] = None, max_count: Optional[int] = None, today_only: bool = True) -> list[Tweet]:
     """
     @shodousan の最新ポストをPlaywrightでスクレイピングして取得する
 
@@ -143,7 +144,7 @@ def fetch_tweets(since_id: Optional[str] = None, max_count: Optional[int] = None
     # XHRが取れなかった場合はDOMから直接取得を再試行
     if not tweets:
         print("[INFO] XHRキャプチャなし。DOM解析にフォールバック...")
-        tweets = _fetch_via_dom(url, since_id)
+        tweets = _fetch_via_dom(url, since_id, today_only=today_only)
         return tweets
 
     # 差分フィルタ
@@ -237,7 +238,7 @@ def _extract_from_json(body: dict, tweets: list, seen_ids: set, pinned_ids: set 
             _extract_from_json(item, tweets, seen_ids, pinned_ids)
 
 
-def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
+def _fetch_via_dom(url: str, since_id: Optional[str], today_only: bool = True) -> list[Tweet]:
     """
     DOMからポストテキストを取得するフォールバック
     XHRキャプチャが失敗した場合に使用する
@@ -336,8 +337,8 @@ def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
                 if not _is_shodou_alert(text):
                     print(f"  [DEBUG] 【初動検知】形式でない → スキップ: {text[:40]!r}")
                     continue
-                # 当日のツイートでなければスキップ
-                if not _is_today_jst(created_at):
+                # 当日のツイートでなければスキップ（today_only=Falseなら無視）
+                if today_only and not _is_today_jst(created_at):
                     print(f"  [DEBUG] 当日でない ({created_at.date()}) → スキップ: {text[:40]!r}")
                     continue
 
@@ -370,6 +371,6 @@ def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
 
 
 def fetch_latest_tweet() -> Optional[Tweet]:
-    """最新の株関連ツイートを1件だけ取得する"""
-    tweets = fetch_tweets(max_count=5)  # 直近5件から株関連を探す
+    """最新の株関連ツイートを1件だけ取得する（日付フィルタなし）"""
+    tweets = fetch_tweets(max_count=5, today_only=False)  # 直近5件から株関連を探す
     return tweets[0] if tweets else None
