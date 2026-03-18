@@ -47,6 +47,7 @@ def _format_markdown(analysis: Analysis) -> str:
 関連銘柄
 {analysis.related_stocks if analysis.related_stocks else "（該当なし）"}"""
 
+    tweet_text_quoted = tweet.text.replace("\n", "  \n> ")
     return f"""# {analysis.stock_code} {analysis.stock_name}
 
 **日時**: {jst_time} JST
@@ -56,7 +57,7 @@ def _format_markdown(analysis: Analysis) -> str:
 
 ## 元ポスト
 
-> {tweet.text.replace(chr(10), '  \n> ')}
+> {tweet_text_quoted}
 
 ---
 
