@@ -69,39 +69,55 @@ def run_demo():
 
 
 def run_setup():
-    """ブラウザを開いてXにログインし、認証状態を保存する"""
-    from playwright.sync_api import sync_playwright
+    """普通のChromeからXのクッキーを抽出して保存する（ログイン不要）"""
+    import json
     from config import AUTH_STATE_FILE
 
     print("=" * 50)
-    print("X ログインセットアップ")
+    print("X クッキー抽出セットアップ")
     print("=" * 50)
-    print("\nブラウザが開きます。X (Twitter) にログインしてください。")
-    print("ログイン完了後、このターミナルに戻って Enter を押してください。\n")
+    print("\nChromeの既存ログイン情報からXのクッキーを取得します。")
+    print("事前にChromeで x.com にログインしておいてください。\n")
 
-    with sync_playwright() as p:
-        # システムのChromeを使用（Xのbot検知を回避）
-        try:
-            browser = p.chromium.launch(headless=False, channel="chrome")
-        except Exception:
-            # Chromeがない場合はMSEdgeを試す
-            try:
-                browser = p.chromium.launch(headless=False, channel="msedge")
-            except Exception:
-                browser = p.chromium.launch(headless=False)
-        context = browser.new_context(
-            viewport={"width": 1280, "height": 900},
-            locale="ja-JP",
-        )
-        page = context.new_page()
-        page.goto("https://x.com/login")
+    try:
+        import browser_cookie3
+    except ImportError:
+        print("❌ browser-cookie3 が未インストールです。")
+        print("   pip install browser-cookie3 を実行してください。")
+        return
 
-        input("ログイン完了後、Enter を押してください...")
+    try:
+        cookies = list(browser_cookie3.chrome(domain_name=".x.com"))
+        cookies += [c for c in browser_cookie3.chrome(domain_name="x.com")
+                    if c.name not in {ck.name for ck in cookies}]
+    except Exception as e:
+        print(f"❌ Chromeのクッキー取得に失敗しました: {e}")
+        print("   Chromeをすべて閉じてから再試行してください。")
+        return
 
-        context.storage_state(path=str(AUTH_STATE_FILE))
-        browser.close()
+    if not cookies:
+        print("❌ Xのクッキーが見つかりませんでした。")
+        print("   Chromeで x.com にログインしてから再試行してください。")
+        return
 
-    print(f"\n✅ 認証状態を保存しました: {AUTH_STATE_FILE}")
+    playwright_cookies = []
+    for c in cookies:
+        playwright_cookies.append({
+            "name": c.name,
+            "value": c.value,
+            "domain": c.domain if c.domain.startswith(".") else f".{c.domain}",
+            "path": c.path or "/",
+            "expires": float(c.expires) if c.expires else -1,
+            "httpOnly": False,
+            "secure": bool(c.secure),
+            "sameSite": "Lax",
+        })
+
+    state = {"cookies": playwright_cookies, "origins": []}
+    with open(AUTH_STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+    print(f"✅ {len(playwright_cookies)} 件のクッキーを保存しました: {AUTH_STATE_FILE}")
     print("次回から python main.py --latest または --watch で使えます")
 
 
