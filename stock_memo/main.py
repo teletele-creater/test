@@ -69,55 +69,64 @@ def run_demo():
 
 
 def run_setup():
-    """普通のChromeからXのクッキーを抽出して保存する（ログイン不要）"""
+    """Cookie-EditorでエクスポートしたJSONからPlaywright用認証状態を生成する"""
     import json
-    from config import AUTH_STATE_FILE
+    from config import AUTH_STATE_FILE, BASE_DIR
 
     print("=" * 50)
-    print("X クッキー抽出セットアップ")
+    print("X クッキーセットアップ")
     print("=" * 50)
-    print("\nChromeの既存ログイン情報からXのクッキーを取得します。")
-    print("事前にChromeで x.com にログインしておいてください。\n")
 
-    try:
-        import rookiepy
-    except ImportError:
-        print("❌ rookiepy が未インストールです。")
-        print("   pip install rookiepy を実行してください。")
+    export_file = BASE_DIR / "x_cookies_export.json"
+
+    if not export_file.exists():
+        print(f"""
+x_cookies_export.json が見つかりません。
+
+以下の手順でクッキーをエクスポートしてください:
+
+1. Chrome拡張「Cookie-Editor」をインストール
+   https://chrome.google.com/webstore/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm
+
+2. Chrome で https://x.com を開いてログイン
+
+3. アドレスバー右の Cookie-Editor アイコンをクリック
+   → 下部の「Export」→「Export as JSON」をクリック
+
+4. コピーした内容を以下のファイルとして保存:
+   {export_file}
+
+5. 再度 python main.py --setup を実行
+""")
         return
 
     try:
-        cookies = rookiepy.chrome([".x.com", "x.com"])
+        with open(export_file, encoding="utf-8") as f:
+            raw_cookies = json.load(f)
     except Exception as e:
-        print(f"❌ Chromeのクッキー取得に失敗しました: {e}")
-        print("   Chromeをすべて閉じてから再試行してください。")
-        return
-
-    if not cookies:
-        print("❌ Xのクッキーが見つかりませんでした。")
-        print("   Chromeで x.com にログインしてから再試行してください。")
+        print(f"❌ ファイルの読み込みに失敗しました: {e}")
         return
 
     playwright_cookies = []
-    for c in cookies:
+    for c in raw_cookies:
         domain = c.get("domain", ".x.com")
         playwright_cookies.append({
             "name": c.get("name", ""),
             "value": c.get("value", ""),
             "domain": domain if domain.startswith(".") else f".{domain}",
             "path": c.get("path") or "/",
-            "expires": float(c.get("expires", -1)) if c.get("expires") else -1,
+            "expires": float(c.get("expirationDate", -1)) if c.get("expirationDate") else -1,
             "httpOnly": bool(c.get("httpOnly", False)),
             "secure": bool(c.get("secure", False)),
-            "sameSite": "Lax",
+            "sameSite": c.get("sameSite", "Lax"),
         })
 
     state = {"cookies": playwright_cookies, "origins": []}
     with open(AUTH_STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
-    print(f"✅ {len(playwright_cookies)} 件のクッキーを保存しました: {AUTH_STATE_FILE}")
-    print("次回から python main.py --latest または --watch で使えます")
+    print(f"✅ {len(playwright_cookies)} 件のクッキーを保存しました")
+    print("python main.py --latest または --watch で使えます")
 
 
 def run_latest():
