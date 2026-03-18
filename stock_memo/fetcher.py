@@ -273,6 +273,7 @@ def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
         # ツイート要素を取得
         # data-testid="tweet" の中の tweetText を探す
         article_els = page.query_selector_all('article[data-testid="tweet"]')
+        print(f"  [DEBUG] article要素数: {len(article_els)}")
 
         for article in article_els[:MAX_TWEETS * 2]:
             try:
@@ -287,11 +288,14 @@ def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
                 # テキスト取得
                 text_el = article.query_selector('[data-testid="tweetText"]')
                 if not text_el:
+                    print(f"  [DEBUG] tweetText要素なし → スキップ")
                     continue
                 text = text_el.inner_text()
+                print(f"  [DEBUG] 取得テキスト: {text[:60]!r}")
 
                 # RT・返信除外
                 if text.startswith("RT @"):
+                    print(f"  [DEBUG] RT → スキップ")
                     continue
 
                 if text in seen_texts:
@@ -316,9 +320,11 @@ def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
 
                 # 【初動検知】形式でないツイートをスキップ
                 if not _is_shodou_alert(text):
+                    print(f"  [DEBUG] 【初動検知】形式でない → スキップ: {text[:40]!r}")
                     continue
                 # 当日のツイートでなければスキップ
                 if not _is_today_jst(created_at):
+                    print(f"  [DEBUG] 当日でない ({created_at.date()}) → スキップ: {text[:40]!r}")
                     continue
 
                 codes = _extract_stock_codes(text)
