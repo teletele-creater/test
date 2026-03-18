@@ -107,9 +107,18 @@ x_cookies_export.json が見つかりません。
         print(f"❌ ファイルの読み込みに失敗しました: {e}")
         return
 
+    same_site_map = {
+        "no_restriction": "None",
+        "lax": "Lax",
+        "strict": "Strict",
+        "unspecified": "Lax",
+    }
+
     playwright_cookies = []
     for c in raw_cookies:
         domain = c.get("domain", ".x.com")
+        raw_same_site = c.get("sameSite", "Lax")
+        same_site = same_site_map.get(raw_same_site.lower(), raw_same_site) if raw_same_site else "Lax"
         playwright_cookies.append({
             "name": c.get("name", ""),
             "value": c.get("value", ""),
@@ -118,7 +127,7 @@ x_cookies_export.json が見つかりません。
             "expires": float(c.get("expirationDate", -1)) if c.get("expirationDate") else -1,
             "httpOnly": bool(c.get("httpOnly", False)),
             "secure": bool(c.get("secure", False)),
-            "sameSite": c.get("sameSite", "Lax"),
+            "sameSite": same_site,
         })
 
     state = {"cookies": playwright_cookies, "origins": []}
