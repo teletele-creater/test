@@ -10,6 +10,7 @@
 """
 
 import sys
+import time
 import argparse
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
@@ -65,6 +66,100 @@ def run_demo():
         print(f"✅ HTMLビューワー: {html_path.absolute()}")
     else:
         print("❌ 分析結果がありません")
+
+
+def run_latest():
+    """最新の株関連ツイート1件を取得して分析する"""
+    from fetcher import fetch_latest_tweet
+    from analyzer import analyze_tweet
+    from storage import save_analysis
+    from viewer import generate_html
+
+    print("=" * 50)
+    print(f"{get_japanese_greeting()} 最新ツイート分析モード")
+    print("=" * 50)
+
+    tweet = fetch_latest_tweet()
+    if not tweet:
+        print("株関連ツイートが見つかりませんでした")
+        return
+
+    print(f"\n📌 最新ツイート: {tweet.text[:60]}...\n")
+    try:
+        analysis = analyze_tweet(tweet)
+        path = save_analysis(analysis)
+        html_path = generate_html()
+        print(f"\n✅ 保存: {path.name}")
+        print(f"🌐 HTML: {html_path.absolute()}")
+    except Exception as e:
+        print(f"❌ エラー: {e}")
+
+
+def run_watch(interval_min: int = 5):
+    """新しいツイートを定期監視して自動分析するループ"""
+    from fetcher import fetch_tweets
+    from analyzer import analyze_tweet
+    from storage import get_last_tweet_id, save_analysis
+    from viewer import generate_html
+
+    print("=" * 50)
+    print(f"{get_japanese_greeting()} 監視モード起動 (チェック間隔: {interval_min}分)")
+    print("Ctrl+C で停止")
+    print("=" * 50)
+
+    # 初回: 最新1件を取得して基準IDを設定
+    print("\n[初回] 最新ツイートを取得中...")
+    last_id = get_last_tweet_id()
+    if not last_id:
+        tweets = fetch_tweets(max_count=5)
+        if tweets:
+            latest = tweets[0]
+            print(f"[INFO] 基準ツイートID: {latest.id}")
+            print(f"[INFO] 内容: {latest.text[:60]}...")
+            try:
+                analysis = analyze_tweet(latest)
+                path = save_analysis(analysis)
+                generate_html()
+                print(f"✅ 分析完了: {path.name}")
+                last_id = latest.id
+            except Exception as e:
+                print(f"❌ 初回分析エラー: {e}")
+        else:
+            print("[WARN] 初回取得で株関連ツイートが見つかりませんでした")
+
+    # 監視ループ
+    try:
+        while True:
+            next_check = datetime.now(timezone(timedelta(hours=9)))
+            print(f"\n⏳ 次回チェック: {interval_min}分後 ({next_check.strftime('%H:%M')} JST 現在)")
+            time.sleep(interval_min * 60)
+
+            jst = timezone(timedelta(hours=9))
+            now_str = datetime.now(jst).strftime("%H:%M")
+            print(f"\n🔍 [{now_str}] 新着チェック中...")
+
+            current_last_id = get_last_tweet_id() or last_id
+            new_tweets = fetch_tweets(since_id=current_last_id, max_count=10)
+
+            if not new_tweets:
+                print("  → 新しい株関連ツイートなし")
+                continue
+
+            print(f"  → {len(new_tweets)} 件の新着ツイートを検出！")
+            for tweet in new_tweets:
+                print(f"\n📌 新着: {tweet.text[:60]}...")
+                try:
+                    analysis = analyze_tweet(tweet)
+                    path = save_analysis(analysis)
+                    print(f"  ✅ 分析・保存: {path.name}")
+                except Exception as e:
+                    print(f"  ❌ 分析エラー: {e}")
+
+            generate_html()
+            print("🌐 HTML更新完了")
+
+    except KeyboardInterrupt:
+        print("\n\n👋 監視を終了しました")
 
 
 def run_html_only():
@@ -137,12 +232,19 @@ def main():
     parser.add_argument("--all", action="store_true", help="差分取得せず全件取得")
     parser.add_argument("--demo", action="store_true", help="デモモード（X APIなし）")
     parser.add_argument("--html-only", action="store_true", help="HTMLのみ再生成")
+    parser.add_argument("--latest", action="store_true", help="最新ツイート1件のみ分析")
+    parser.add_argument("--watch", type=int, nargs="?", const=5, metavar="分",
+                        help="監視ループ起動。チェック間隔を分で指定（デフォルト: 5分）")
     args = parser.parse_args()
 
     if args.demo:
         run_demo()
     elif args.html_only:
         run_html_only()
+    elif args.latest:
+        run_latest()
+    elif args.watch is not None:
+        run_watch(interval_min=args.watch)
     else:
         run(fetch_all=args.all)
 

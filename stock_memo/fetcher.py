@@ -57,7 +57,7 @@ def _make_id(text: str, timestamp: str) -> str:
     return hashlib.md5(raw.encode()).hexdigest()[:16]
 
 
-def fetch_tweets(since_id: Optional[str] = None) -> list[Tweet]:
+def fetch_tweets(since_id: Optional[str] = None, max_count: Optional[int] = None) -> list[Tweet]:
     """
     @shodousan の最新ポストをPlaywrightでスクレイピングして取得する
 
@@ -143,8 +143,9 @@ def fetch_tweets(since_id: Optional[str] = None) -> list[Tweet]:
             new_tweets.append(tw)
         tweets = new_tweets
 
-    # MAX_TWEETS件に絞る
-    tweets = tweets[:MAX_TWEETS]
+    # 件数制限
+    limit = max_count if max_count is not None else MAX_TWEETS
+    tweets = tweets[:limit]
 
     stock_tweets = [t for t in tweets if _is_stock_related(t.text, t.stock_codes)]
     print(f"[INFO] {len(tweets)} ポスト取得、うち株関連: {len(stock_tweets)} 件")
@@ -295,3 +296,9 @@ def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
     tweets = tweets[:MAX_TWEETS]
     print(f"[INFO] DOM解析: 株関連 {len(tweets)} 件取得")
     return tweets
+
+
+def fetch_latest_tweet() -> Optional[Tweet]:
+    """最新の株関連ツイートを1件だけ取得する"""
+    tweets = fetch_tweets(max_count=5)  # 直近5件から株関連を探す
+    return tweets[0] if tweets else None
