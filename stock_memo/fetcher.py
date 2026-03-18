@@ -9,7 +9,7 @@ import json
 import time
 import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from config import TARGET_USERNAME, MAX_TWEETS
 
@@ -30,16 +30,16 @@ def _extract_stock_codes(text: str) -> list[str]:
     return list(set(codes))
 
 
-def _is_stock_related(text: str, codes: list[str]) -> bool:
-    """ポストが株関連かどうかを判定する"""
-    if codes:
-        return True
-    stock_keywords = [
-        '株', '銘柄', '上昇', '急騰', '高騰', 'ストップ高', '初動',
-        '決算', '上方修正', '買い', 'テーマ株', '材料',
-        '増益', '増収', '利益', 'PER', 'PBR',
-    ]
-    return any(kw in text for kw in stock_keywords)
+def _is_shodou_alert(text: str) -> bool:
+    """【初動検知】企業名（銘柄コード）形式のツイートかどうかを判定する"""
+    return bool(re.match(r'【初動検知】.+（\d{4}）', text))
+
+
+def _is_today_jst(dt: datetime) -> bool:
+    """datetimeが日本時間で今日かどうかを判定する"""
+    jst = timezone(timedelta(hours=9))
+    today = datetime.now(jst).date()
+    return dt.astimezone(jst).date() == today
 
 
 def _parse_twitter_date(date_str: str) -> datetime:
@@ -153,9 +153,8 @@ def fetch_tweets(since_id: Optional[str] = None, max_count: Optional[int] = None
     limit = max_count if max_count is not None else MAX_TWEETS
     tweets = tweets[:limit]
 
-    stock_tweets = [t for t in tweets if _is_stock_related(t.text, t.stock_codes)]
-    print(f"[INFO] {len(tweets)} ポスト取得、うち株関連: {len(stock_tweets)} 件")
-    return stock_tweets
+    print(f"[INFO] 【初動検知】当日ツイート: {len(tweets)} 件取得")
+    return tweets
 
 
 def _collect_pinned_ids(body) -> set:
@@ -208,6 +207,13 @@ def _extract_from_json(body: dict, tweets: list, seen_ids: set, pinned_ids: set 
                     ).replace(tzinfo=timezone.utc)
                 except Exception:
                     created_at = datetime.now(timezone.utc)
+
+                # 【初動検知】形式でないツイートをスキップ
+                if not _is_shodou_alert(text):
+                    return
+                # 当日のツイートでなければスキップ
+                if not _is_today_jst(created_at):
+                    return
 
                 codes = _extract_stock_codes(text)
                 tweets.append(Tweet(
@@ -308,14 +314,20 @@ def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
                 if not tweet_id:
                     tweet_id = _make_id(text, date_str)
 
+                # 【初動検知】形式でないツイートをスキップ
+                if not _is_shodou_alert(text):
+                    continue
+                # 当日のツイートでなければスキップ
+                if not _is_today_jst(created_at):
+                    continue
+
                 codes = _extract_stock_codes(text)
-                if _is_stock_related(text, codes):
-                    tweets.append(Tweet(
-                        id=tweet_id,
-                        text=text,
-                        created_at=created_at,
-                        stock_codes=codes
-                    ))
+                tweets.append(Tweet(
+                    id=tweet_id,
+                    text=text,
+                    created_at=created_at,
+                    stock_codes=codes
+                ))
 
             except Exception as e:
                 print(f"  [WARN] 要素解析エラー: {e}")
