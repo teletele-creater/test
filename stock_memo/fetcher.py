@@ -32,7 +32,7 @@ def _extract_stock_codes(text: str) -> list[str]:
 
 def _is_shodou_alert(text: str) -> bool:
     """【初動検知】企業名（銘柄コード）形式のツイートかどうかを判定する"""
-    return bool(re.match(r'【初動検知】.+（\d{4}）', text))
+    return bool(re.match(r'【初動検知】.+[（(]\d{4}[）)]', text))
 
 
 def _is_today_jst(dt: datetime) -> bool:
