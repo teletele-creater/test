@@ -80,7 +80,15 @@ def run_setup():
     print("ログイン完了後、このターミナルに戻って Enter を押してください。\n")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        # システムのChromeを使用（Xのbot検知を回避）
+        try:
+            browser = p.chromium.launch(headless=False, channel="chrome")
+        except Exception:
+            # Chromeがない場合はMSEdgeを試す
+            try:
+                browser = p.chromium.launch(headless=False, channel="msedge")
+            except Exception:
+                browser = p.chromium.launch(headless=False)
         context = browser.new_context(
             viewport={"width": 1280, "height": 900},
             locale="ja-JP",
