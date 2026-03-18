@@ -95,6 +95,10 @@ def save_analysis(analysis: Analysis) -> Path:
 
     print(f"  [保存] {filepath.name}")
 
+    # Notion に保存
+    from notion_storage import save_to_notion
+    save_to_notion(analysis)
+
     # 状態を更新
     state = _load_state()
     if not state.get("last_tweet_id") or int(tweet.id) > int(state["last_tweet_id"]):

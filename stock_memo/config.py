@@ -7,6 +7,10 @@ load_dotenv()
 # Anthropic API
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
+# Notion API
+NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
+NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID", "")
+
 # 設定
 TARGET_USERNAME = os.getenv("TARGET_USERNAME", "shodousan")
 MAX_TWEETS = int(os.getenv("MAX_TWEETS", "20"))
