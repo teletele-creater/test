@@ -125,8 +125,14 @@ def fetch_tweets(since_id: Optional[str] = None, max_count: Optional[int] = None
         browser.close()
 
     # --- XHRから取得したJSONを解析 ---
+    # 先に固定ツイートIDを収集してから除外しつつ抽出
+    all_pinned_ids: set[str] = set()
     for body in intercepted:
-        _extract_from_json(body, tweets, seen_ids)
+        all_pinned_ids |= _collect_pinned_ids(body)
+    if all_pinned_ids:
+        print(f"  [INFO] 固定ツイート {len(all_pinned_ids)} 件をスキップ: {all_pinned_ids}")
+    for body in intercepted:
+        _extract_from_json(body, tweets, seen_ids, all_pinned_ids)
 
     # XHRが取れなかった場合はDOMから直接取得を再試行
     if not tweets:
@@ -152,8 +158,29 @@ def fetch_tweets(since_id: Optional[str] = None, max_count: Optional[int] = None
     return stock_tweets
 
 
-def _extract_from_json(body: dict, tweets: list, seen_ids: set) -> None:
+def _collect_pinned_ids(body) -> set:
+    """JSONからピン留めツイートのIDを収集する（TimelinePinEntryを検索）"""
+    pinned_ids: set[str] = set()
+
+    def _walk(obj, in_pinned: bool):
+        if isinstance(obj, dict):
+            is_pinned = in_pinned or obj.get("type") == "TimelinePinEntry"
+            if is_pinned and "legacy" in obj and "id_str" in obj.get("legacy", {}):
+                pinned_ids.add(obj["legacy"]["id_str"])
+            for v in obj.values():
+                _walk(v, is_pinned)
+        elif isinstance(obj, list):
+            for item in obj:
+                _walk(item, in_pinned)
+
+    _walk(body, False)
+    return pinned_ids
+
+
+def _extract_from_json(body: dict, tweets: list, seen_ids: set, pinned_ids: set | None = None) -> None:
     """XのAPIレスポンスJSONからツイートを再帰的に抽出する"""
+    if pinned_ids is None:
+        pinned_ids = set()
     if isinstance(body, dict):
         # tweet_results → result → legacy にツイートデータがある
         if "legacy" in body and "full_text" in body.get("legacy", {}):
@@ -167,6 +194,10 @@ def _extract_from_json(body: dict, tweets: list, seen_ids: set) -> None:
                 return
             # 返信を除外（in_reply_to_user_id が設定されているもの）
             if legacy.get("in_reply_to_user_id_str"):
+                return
+            # 固定ツイートを除外
+            if tweet_id in pinned_ids:
+                print(f"  [SKIP] 固定ツイート: {text[:40]}...")
                 return
 
             if tweet_id and tweet_id not in seen_ids:
@@ -187,11 +218,11 @@ def _extract_from_json(body: dict, tweets: list, seen_ids: set) -> None:
                 ))
 
         for v in body.values():
-            _extract_from_json(v, tweets, seen_ids)
+            _extract_from_json(v, tweets, seen_ids, pinned_ids)
 
     elif isinstance(body, list):
         for item in body:
-            _extract_from_json(item, tweets, seen_ids)
+            _extract_from_json(item, tweets, seen_ids, pinned_ids)
 
 
 def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
@@ -239,6 +270,14 @@ def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
 
         for article in article_els[:MAX_TWEETS * 2]:
             try:
+                # 固定ツイートを除外（「ピン留め」インジケータの有無で判定）
+                pinned_el = article.query_selector('[data-testid="socialContext"]')
+                if pinned_el:
+                    ctx_text = pinned_el.inner_text()
+                    if "ピン" in ctx_text or "Pin" in ctx_text:
+                        print(f"  [SKIP] 固定ツイート（DOM）をスキップ")
+                        continue
+
                 # テキスト取得
                 text_el = article.query_selector('[data-testid="tweetText"]')
                 if not text_el:
