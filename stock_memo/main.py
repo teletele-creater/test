@@ -80,16 +80,14 @@ def run_setup():
     print("事前にChromeで x.com にログインしておいてください。\n")
 
     try:
-        import browser_cookie3
+        import rookiepy
     except ImportError:
-        print("❌ browser-cookie3 が未インストールです。")
-        print("   pip install browser-cookie3 を実行してください。")
+        print("❌ rookiepy が未インストールです。")
+        print("   pip install rookiepy を実行してください。")
         return
 
     try:
-        cookies = list(browser_cookie3.chrome(domain_name=".x.com"))
-        cookies += [c for c in browser_cookie3.chrome(domain_name="x.com")
-                    if c.name not in {ck.name for ck in cookies}]
+        cookies = rookiepy.chrome([".x.com", "x.com"])
     except Exception as e:
         print(f"❌ Chromeのクッキー取得に失敗しました: {e}")
         print("   Chromeをすべて閉じてから再試行してください。")
@@ -102,14 +100,15 @@ def run_setup():
 
     playwright_cookies = []
     for c in cookies:
+        domain = c.get("domain", ".x.com")
         playwright_cookies.append({
-            "name": c.name,
-            "value": c.value,
-            "domain": c.domain if c.domain.startswith(".") else f".{c.domain}",
-            "path": c.path or "/",
-            "expires": float(c.expires) if c.expires else -1,
-            "httpOnly": False,
-            "secure": bool(c.secure),
+            "name": c.get("name", ""),
+            "value": c.get("value", ""),
+            "domain": domain if domain.startswith(".") else f".{domain}",
+            "path": c.get("path") or "/",
+            "expires": float(c.get("expires", -1)) if c.get("expires") else -1,
+            "httpOnly": bool(c.get("httpOnly", False)),
+            "secure": bool(c.get("secure", False)),
             "sameSite": "Lax",
         })
 
