@@ -177,23 +177,23 @@ def run_watch(interval_min: int = 5):
     print("Ctrl+C で停止")
     print("=" * 50)
 
-    # 初回: 最新1件を取得して基準IDを設定
+    # 初回: 当日の全ツイートを取得して処理
     print("\n[初回] 最新ツイートを取得中...")
     last_id = get_last_tweet_id()
     if not last_id:
-        tweets = fetch_tweets(max_count=5)
+        tweets = fetch_tweets(max_count=20)
         if tweets:
-            latest = tweets[0]
-            print(f"[INFO] 基準ツイートID: {latest.id}")
-            print(f"[INFO] 内容: {latest.text[:60]}...")
-            try:
-                analysis = analyze_tweet(latest)
-                path = save_analysis(analysis)
-                generate_html()
-                print(f"✅ 分析完了: {path.name}")
-                last_id = latest.id
-            except Exception as e:
-                print(f"❌ 初回分析エラー: {e}")
+            print(f"[INFO] {len(tweets)} 件のツイートを初回処理中...")
+            for tweet in tweets:
+                print(f"[INFO] 内容: {tweet.text[:60]}...")
+                try:
+                    analysis = analyze_tweet(tweet)
+                    path = save_analysis(analysis)
+                    print(f"✅ 分析完了: {path.name}")
+                except Exception as e:
+                    print(f"❌ 初回分析エラー: {e}")
+            generate_html()
+            last_id = get_last_tweet_id()
         else:
             print("[WARN] 初回取得で株関連ツイートが見つかりませんでした")
 
@@ -209,7 +209,7 @@ def run_watch(interval_min: int = 5):
             print(f"\n🔍 [{now_str}] 新着チェック中...")
 
             current_last_id = get_last_tweet_id() or last_id
-            new_tweets = fetch_tweets(since_id=current_last_id, max_count=10)
+            new_tweets = fetch_tweets(since_id=current_last_id, max_count=20)
 
             if not new_tweets:
                 print("  → 新しい株関連ツイートなし")

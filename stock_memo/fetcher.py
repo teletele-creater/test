@@ -151,12 +151,17 @@ def fetch_tweets(since_id: Optional[str] = None, max_count: Optional[int] = None
 
     # 差分フィルタ
     if since_id:
-        new_tweets = []
-        for tw in tweets:
-            if tw.id == since_id:
-                break
-            new_tweets.append(tw)
-        tweets = new_tweets
+        try:
+            since_id_int = int(since_id)
+            tweets = [tw for tw in tweets if int(tw.id) > since_id_int]
+        except (ValueError, TypeError):
+            # ハッシュID（DOM fallback）の場合は完全一致で停止
+            new_tweets = []
+            for tw in tweets:
+                if tw.id == since_id:
+                    break
+                new_tweets.append(tw)
+            tweets = new_tweets
 
     # 件数制限
     limit = max_count if max_count is not None else MAX_TWEETS
@@ -360,12 +365,17 @@ def _fetch_via_dom(url: str, since_id: Optional[str], today_only: bool = True) -
 
     # 差分フィルタ
     if since_id:
-        new_tweets = []
-        for tw in tweets:
-            if tw.id == since_id:
-                break
-            new_tweets.append(tw)
-        tweets = new_tweets
+        try:
+            since_id_int = int(since_id)
+            tweets = [tw for tw in tweets if int(tw.id) > since_id_int]
+        except (ValueError, TypeError):
+            # ハッシュID（_make_id）の場合は完全一致で停止
+            new_tweets = []
+            for tw in tweets:
+                if tw.id == since_id:
+                    break
+                new_tweets.append(tw)
+            tweets = new_tweets
 
     tweets = tweets[:MAX_TWEETS]
     print(f"[INFO] DOM解析: 株関連 {len(tweets)} 件取得")
