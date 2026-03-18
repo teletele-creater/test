@@ -14,3 +14,5 @@ MAX_TWEETS = int(os.getenv("MAX_TWEETS", "20"))
 BASE_DIR = Path(__file__).parent
 NOTES_DIR = BASE_DIR / os.getenv("NOTES_DIR", "notes")
 NOTES_DIR.mkdir(exist_ok=True)
+
+AUTH_STATE_FILE = BASE_DIR / ".auth_state.json"

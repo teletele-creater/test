@@ -11,7 +11,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from config import TARGET_USERNAME, MAX_TWEETS
+from config import TARGET_USERNAME, MAX_TWEETS, AUTH_STATE_FILE
 
 
 @dataclass
@@ -88,6 +88,11 @@ def fetch_tweets(since_id: Optional[str] = None, max_count: Optional[int] = None
             headless=True,
             args=["--no-sandbox", "--disable-setuid-sandbox"]
         )
+        auth_state = str(AUTH_STATE_FILE) if AUTH_STATE_FILE.exists() else None
+        if auth_state:
+            print("  [INFO] 認証状態を使用してログイン済みモードで取得")
+        else:
+            print("  [WARN] 認証状態なし。python main.py --setup でログインしてください")
         context = browser.new_context(
             viewport={"width": 1280, "height": 900},
             user_agent=(
@@ -96,6 +101,7 @@ def fetch_tweets(since_id: Optional[str] = None, max_count: Optional[int] = None
                 "Chrome/120.0.0.0 Safari/537.36"
             ),
             locale="ja-JP",
+            storage_state=auth_state,
         )
 
         # XHRレスポンスからツイートJSONを横取りする
@@ -249,6 +255,11 @@ def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
             headless=True,
             args=["--no-sandbox", "--disable-setuid-sandbox"]
         )
+        auth_state = str(AUTH_STATE_FILE) if AUTH_STATE_FILE.exists() else None
+        if auth_state:
+            print("  [INFO] 認証状態を使用してログイン済みモードで取得")
+        else:
+            print("  [WARN] 認証状態なし。python main.py --setup でログインしてください")
         context = browser.new_context(
             viewport={"width": 1280, "height": 900},
             user_agent=(
@@ -257,6 +268,7 @@ def _fetch_via_dom(url: str, since_id: Optional[str]) -> list[Tweet]:
                 "Chrome/120.0.0.0 Safari/537.36"
             ),
             locale="ja-JP",
+            storage_state=auth_state,
         )
         page = context.new_page()
 

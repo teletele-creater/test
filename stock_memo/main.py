@@ -68,6 +68,35 @@ def run_demo():
         print("❌ 分析結果がありません")
 
 
+def run_setup():
+    """ブラウザを開いてXにログインし、認証状態を保存する"""
+    from playwright.sync_api import sync_playwright
+    from config import AUTH_STATE_FILE
+
+    print("=" * 50)
+    print("X ログインセットアップ")
+    print("=" * 50)
+    print("\nブラウザが開きます。X (Twitter) にログインしてください。")
+    print("ログイン完了後、このターミナルに戻って Enter を押してください。\n")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        context = browser.new_context(
+            viewport={"width": 1280, "height": 900},
+            locale="ja-JP",
+        )
+        page = context.new_page()
+        page.goto("https://x.com/login")
+
+        input("ログイン完了後、Enter を押してください...")
+
+        context.storage_state(path=str(AUTH_STATE_FILE))
+        browser.close()
+
+    print(f"\n✅ 認証状態を保存しました: {AUTH_STATE_FILE}")
+    print("次回から python main.py --latest または --watch で使えます")
+
+
 def run_latest():
     """最新の株関連ツイート1件を取得して分析する"""
     from fetcher import fetch_latest_tweet
@@ -235,9 +264,12 @@ def main():
     parser.add_argument("--latest", action="store_true", help="最新ツイート1件のみ分析")
     parser.add_argument("--watch", type=int, nargs="?", const=5, metavar="分",
                         help="監視ループ起動。チェック間隔を分で指定（デフォルト: 5分）")
+    parser.add_argument("--setup", action="store_true", help="Xにログインして認証状態を保存")
     args = parser.parse_args()
 
-    if args.demo:
+    if args.setup:
+        run_setup()
+    elif args.demo:
         run_demo()
     elif args.html_only:
         run_html_only()
