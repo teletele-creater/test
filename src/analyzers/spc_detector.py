@@ -3,7 +3,10 @@ SPC（特別目的会社）検出エンジン
 新規設立法人からMBO用SPCの可能性がある法人を検出する
 """
 import re
-from config.settings import SPC_NAME_PATTERNS, SPC_ENTITY_TYPES, PE_FUND_KEYWORDS
+from config.settings import (
+    SPC_NAME_PATTERNS, SPC_ENTITY_TYPES, PE_FUND_KEYWORDS,
+    FALSE_POSITIVE_KEYWORDS, FALSE_POSITIVE_PURPOSE_KEYWORDS,
+)
 from src.utils.logger import setup_logger
 
 logger = setup_logger("spc_detector")
@@ -16,6 +19,8 @@ class SpcDetector:
         self.name_patterns = SPC_NAME_PATTERNS
         self.entity_types = SPC_ENTITY_TYPES
         self.pe_keywords = PE_FUND_KEYWORDS
+        self.fp_keywords = FALSE_POSITIVE_KEYWORDS
+        self.fp_purpose_keywords = FALSE_POSITIVE_PURPOSE_KEYWORDS
 
     def analyze(self, corporation: dict) -> dict:
         """
@@ -59,8 +64,14 @@ class SpcDetector:
         if cap_reason:
             reasons.append(cap_reason)
 
+        # 6. 偽陽性フィルタ（不動産・太陽光等を減点）
+        fp_penalty, fp_reason = self._check_false_positive(corporation)
+        score += fp_penalty  # 負の値
+        if fp_reason:
+            reasons.append(fp_reason)
+
         # スコアを0-1に正規化
-        score = min(score, 1.0)
+        score = max(min(score, 1.0), 0.0)
 
         corporation["spc_score"] = round(score, 3)
         corporation["is_spc_candidate"] = 1 if score >= 0.3 else 0
@@ -109,6 +120,13 @@ class SpcDetector:
             score += 0.1
             reasons.append("英語名のみの法人")
 
+        # 大文字アルファベット略称 + 合同会社（TBJH合同会社、BCPE Gaiaなど）
+        # MBO SPCは意味不明な略称を使うことが多い
+        clean_name = re.sub(r'(合同会社|株式会社)', '', name).strip()
+        if re.match(r'^[A-Z]{2,6}(\s|$)', clean_name):
+            score += 0.15
+            reasons.append(f"アルファベット略称法人名('{clean_name}')")
+
         # 極端に短い名前や汎用的な名前
         if len(name) <= 5 and any(p.lower() in name.lower() for p in ["HD", "合同"]):
             score += 0.05
@@ -144,6 +162,24 @@ class SpcDetector:
         for area in mid_score_areas:
             if area in address:
                 return 0.05, f"都心部に所在({area})"
+
+        return 0.0, ""
+
+    def _check_false_positive(self, corp: dict) -> tuple:
+        """偽陽性チェック：MBOと無関係な業種を減点"""
+        name = corp.get("name", "") or ""
+        purpose = corp.get("purpose", "") or ""
+        text = f"{name} {purpose}".lower()
+
+        # 法人名に偽陽性キーワードが含まれる場合
+        for keyword in self.fp_keywords:
+            if keyword.lower() in text:
+                return -0.3, f"非MBO業種の可能性('{keyword}'を含む)"
+
+        # 事業目的に偽陽性キーワードが含まれる場合
+        for keyword in self.fp_purpose_keywords:
+            if keyword.lower() in purpose.lower():
+                return -0.2, f"事業目的が非MBO('{keyword}')"
 
         return 0.0, ""
 

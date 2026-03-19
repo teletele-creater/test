@@ -106,6 +106,22 @@ class MboMatcher:
 
         return min(score, 1.0), reasons
 
+    # SPC名から除去するサフィックス（類似度計算用）
+    _SPC_SUFFIXES = re.compile(
+        r'(合同会社|株式会社|ホールディングス|HD|インベストメント|'
+        r'キャピタル|パートナーズ|アドバイザリー|アクイジション|'
+        r'Holdings|Investment|Capital|Partners|Acquisition|Advisory|'
+        r'合同|LLC|Inc\.?|Co\.?,?\s*Ltd\.?)',
+        re.IGNORECASE,
+    )
+
+    def _normalize_name(self, name: str) -> str:
+        """比較用に法人名を正規化（サフィックス除去）"""
+        cleaned = self._SPC_SUFFIXES.sub('', name).strip()
+        # 全角→半角の基本変換
+        cleaned = cleaned.replace('　', ' ').strip()
+        return cleaned if cleaned else name
+
     def _check_name_similarity(self, spc: dict, company: dict) -> tuple:
         """SPC名と上場企業名の類似度を確認"""
         spc_name = spc.get("name", "")
@@ -114,12 +130,32 @@ class MboMatcher:
         if not spc_name or not company_name:
             return 0.0, ""
 
-        # 完全一致（企業名を含む）
-        clean_company = re.sub(r'(株式会社|（株）)', '', company_name).strip()
-        if clean_company and clean_company in spc_name:
+        # 企業名からも法人格を除去
+        clean_company = re.sub(r'(株式会社|（株）|ホールディングス)', '', company_name).strip()
+
+        # 1. SPC名に企業名が直接含まれる
+        if clean_company and len(clean_company) >= 2 and clean_company in spc_name:
             return 0.5, f"SPC名に企業名'{clean_company}'を含む"
 
-        # 部分一致チェック
+        # 2. 正規化した名前同士で類似度チェック
+        norm_spc = self._normalize_name(spc_name)
+        norm_company = self._normalize_name(company_name)
+
+        if norm_spc and norm_company:
+            # 正規化後に一方が他方を含む
+            if len(norm_company) >= 2 and norm_company in norm_spc:
+                return 0.45, f"正規化名で企業名'{norm_company}'を含む"
+            if len(norm_spc) >= 2 and norm_spc in norm_company:
+                return 0.45, f"正規化名でSPC名'{norm_spc}'を含む"
+
+            # 文字列類似度
+            similarity = SequenceMatcher(None, norm_spc, norm_company).ratio()
+            if similarity >= 0.6:
+                return 0.35, f"正規化名の類似度が高い({similarity:.2f})"
+            elif similarity >= 0.4:
+                return 0.2, f"正規化名がやや類似({similarity:.2f})"
+
+        # 3. 元の名前でもフォールバック
         similarity = SequenceMatcher(None, spc_name, company_name).ratio()
         if similarity >= 0.5:
             return 0.3, f"名称類似度が高い({similarity:.2f})"

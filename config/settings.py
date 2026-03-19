@@ -43,6 +43,7 @@ USER_AGENT = "MBO-Detector/1.0 (Research Purpose)"
 # === SPC検出パターン ===
 # MBO用SPCに多い法人名パターン
 SPC_NAME_PATTERNS = [
+    # 基本パターン
     "ホールディングス",
     "HD",
     "インベストメント",
@@ -52,11 +53,26 @@ SPC_NAME_PATTERNS = [
     "投資",
     "買収",
     "アクイジション",
+    # 英語パターン
     "Acquisition",
     "Holdings",
     "Investment",
     "Capital",
     "Partners",
+    "Advisory",
+    # MBO実例で頻出するパターン
+    "合同会社BCPE",      # ベインキャピタル系SPC
+    "エスケーホールディングス",  # 典型的なSPC命名
+    "グロース",
+    "バリュー",
+    "ストラテジック",
+    "マージャー",
+    "Merger",
+    "Buyout",
+    "バイアウト",
+    "テンダー",
+    "Tender",
+    "オファー",
 ]
 
 # SPC法人形態（合同会社が圧倒的に多い）
@@ -65,33 +81,69 @@ SPC_ENTITY_TYPES = [
     "株式会社",
 ]
 
+# === 偽陽性除外パターン ===
+# MBOとは無関係にSPCパターンに一致してしまう業種・用途
+FALSE_POSITIVE_KEYWORDS = [
+    # 不動産
+    "不動産", "リアルエステート", "Real Estate", "プロパティ",
+    "マンション", "レジデンス", "ビルディング", "アパート",
+    # 太陽光・再エネ
+    "太陽光", "ソーラー", "Solar", "再生可能エネルギー",
+    "風力", "バイオマス", "発電",
+    # 一般事業
+    "飲食", "レストラン", "クリニック", "医療", "薬局",
+    "美容", "サロン", "整骨", "介護", "福祉",
+    "運送", "物流", "清掃", "建設", "工務",
+    "農業", "漁業", "林業",
+    # 暗号資産・FX
+    "暗号資産", "仮想通貨", "FX", "バイナリー",
+]
+
+# 偽陽性の法人目的パターン（purposeフィールドで除外）
+FALSE_POSITIVE_PURPOSE_KEYWORDS = [
+    "不動産の売買", "不動産の賃貸", "不動産の管理",
+    "太陽光発電", "再生可能エネルギー",
+    "飲食店の経営", "飲食業",
+]
+
 # MBOに関連するPEファンド名
 PE_FUND_KEYWORDS = [
-    "ベインキャピタル",
-    "Bain Capital",
-    "カーライル",
-    "Carlyle",
+    # グローバルPE
+    "ベインキャピタル", "Bain Capital", "BCPE",
+    "カーライル", "Carlyle",
     "KKR",
-    "ブラックストーン",
-    "Blackstone",
-    "MBKパートナーズ",
-    "MBK Partners",
-    "ユニゾン",
-    "Unison",
-    "ポラリス",
-    "Polaris",
-    "アドバンテッジ",
-    "Advantage",
-    "日本産業パートナーズ",
-    "JIP",
-    "インテグラル",
-    "Integral",
-    "エンデバー",
+    "ブラックストーン", "Blackstone",
+    "MBKパートナーズ", "MBK Partners",
+    "アポロ", "Apollo",
+    "EQT",
+    "CVC", "CVCキャピタル",
+    "ペルミラ", "Permira",
+    "ウォーバーグ", "Warburg Pincus",
+    # 日本国内PE
+    "ユニゾン", "Unison",
+    "ポラリス", "Polaris",
+    "アドバンテッジ", "Advantage Partners",
+    "日本産業パートナーズ", "JIP",
+    "インテグラル", "Integral",
+    "エンデバー", "Endeavour",
     "BCJ",
-    "ロングリーチ",
-    "Longreach",
+    "ロングリーチ", "Longreach",
     "J-STAR",
     "丸の内キャピタル",
+    "日本産業推進機構", "NSSK",
+    "ニューホライズンキャピタル",
+    "アント・キャピタル", "Ant Capital",
+    "東京海上キャピタル",
+    "野村キャピタル",
+    "大和PIパートナーズ",
+    "みずほキャピタル",
+    "SBIキャピタル",
+    "ジャフコ", "JAFCO",
+    "タイヨウファンド", "Taiyo",
+    "オアシス", "Oasis",
+    "エフィッシモ", "Effissimo",
+    "ダルトン", "Dalton",
+    "3Dインベストメント", "3D Investment",
 ]
 
 # === 監視スケジュール ===
