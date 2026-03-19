@@ -93,13 +93,19 @@ class MboMatcher:
         if name_reason:
             reasons.append(name_reason)
 
-        # 2. 住所の一致チェック
+        # 2. 代表者名クロスリファレンス
+        rep_score, rep_reason = self._check_representative_match(spc, company)
+        score += rep_score
+        if rep_reason:
+            reasons.append(rep_reason)
+
+        # 3. 住所の一致チェック
         addr_score, addr_reason = self._check_address_match(spc, company)
         score += addr_score
         if addr_reason:
             reasons.append(addr_reason)
 
-        # 3. MBO対象になりやすい企業特性
+        # 4. MBO対象になりやすい企業特性
         profile_score, profile_reasons = self._check_company_profile(company)
         score += profile_score
         reasons.extend(profile_reasons)
@@ -165,26 +171,89 @@ class MboMatcher:
         return 0.0, ""
 
     @staticmethod
+    def _check_representative_match(spc: dict, company: dict) -> tuple:
+        """SPC代表者と上場企業役員の一致チェック
+
+        レポート: 大正製薬MBOでは、SPCの代表者が副社長・上原茂氏（創業家）だった。
+        代表者名と上場企業の役員リストを照合することで高精度マッチが可能。
+        """
+        spc_rep = spc.get("representative", "") or ""
+        if not spc_rep:
+            return 0.0, ""
+
+        # 上場企業の役員リスト（officers）またはオーナー名（owner_name）と照合
+        officers = company.get("officers", []) or []
+        owner_name = company.get("owner_name", "") or ""
+
+        # 代表者名のクリーニング（肩書き除去）
+        clean_rep = re.sub(r'(代表社員|代表取締役|取締役|社長|会長|副社長)', '', spc_rep).strip()
+        if not clean_rep or len(clean_rep) < 2:
+            return 0.0, ""
+
+        # オーナー名との一致
+        if owner_name and clean_rep in owner_name:
+            return 0.5, f"SPC代表者がオーナー'{owner_name}'と一致"
+
+        # 役員リストとの照合
+        for officer in officers:
+            officer_name = officer if isinstance(officer, str) else officer.get("name", "")
+            if clean_rep in officer_name:
+                return 0.45, f"SPC代表者が役員'{officer_name}'と一致"
+
+        return 0.0, ""
+
+    @staticmethod
     def _check_address_match(spc: dict, company: dict) -> tuple:
-        """住所の一致チェック"""
-        # 現在は簡易チェック（法人番号から住所を突合）
-        # 将来的にはより詳細な住所マッチングを実装
+        """住所の一致チェック
+
+        レポート: I-Oデータ事例ではSPC住所が大株主「有限会社トレント」と同一住所だった。
+        SPCと上場企業（または大株主）の住所が同一エリアなら高スコア。
+        """
+        spc_addr = f"{spc.get('prefecture', '')} {spc.get('city', '')} {spc.get('address', '')}"
+        company_addr = company.get("address", "") or ""
+        hq_addr = company.get("hq_address", "") or ""
+
+        if not spc_addr.strip():
+            return 0.0, ""
+
+        # 上場企業の本社住所との一致チェック
+        for addr_field in [company_addr, hq_addr]:
+            if not addr_field:
+                continue
+            # 市区町村レベルまで一致
+            spc_parts = spc_addr.split()
+            for part in spc_parts:
+                if len(part) >= 3 and part in addr_field:
+                    return 0.15, f"所在地が類似('{part}')"
+
         return 0.0, ""
 
     @staticmethod
     def _check_company_profile(company: dict) -> tuple:
-        """MBO対象になりやすい企業特性チェック"""
+        """MBO対象になりやすい企業特性チェック
+
+        レポート記載の重要シグナル:
+        - PBR1倍割れ（特に0.8倍以下）
+        - オーナー経営者の高齢化（65歳以上で後継者問題あり）
+        - 高い内部者持株比率（20〜30%以上）
+        - ネットキャッシュ比率（時価総額の30%以上）
+        - FCF利回り5%以上
+        - アクティビスト株主の出現
+        """
         score = 0.0
         reasons = []
 
-        # 低PBR
+        # 低PBR（東証PBR改革で最重要シグナルに）
         pbr = company.get("pbr")
         if pbr is not None and pbr > 0:
             if pbr < 0.5:
                 score += 0.15
                 reasons.append(f"PBR極端に低い({pbr:.2f})")
+            elif pbr < 0.8:
+                score += 0.12
+                reasons.append(f"PBR0.8倍割れ({pbr:.2f})")
             elif pbr < 1.0:
-                score += 0.1
+                score += 0.08
                 reasons.append(f"PBR1倍割れ({pbr:.2f})")
 
         # オーナー持株比率
@@ -207,5 +276,44 @@ class MboMatcher:
             elif cap_billion < 200:
                 score += 0.05
                 reasons.append(f"中型株(時価総額{cap_billion:.0f}億円)")
+
+        # CEO年齢（後継者問題はMBO動機の核心）
+        ceo_age = company.get("ceo_age")
+        if ceo_age is not None:
+            if ceo_age >= 70:
+                score += 0.12
+                reasons.append(f"CEO高齢({ceo_age}歳)")
+            elif ceo_age >= 65:
+                score += 0.08
+                reasons.append(f"CEO65歳以上({ceo_age}歳)")
+
+        # ネットキャッシュ比率（LBOファイナンスの実行可能性）
+        net_cash = company.get("net_cash")
+        if net_cash is not None and market_cap and market_cap > 0:
+            ratio = net_cash / market_cap
+            if ratio >= 0.5:
+                score += 0.1
+                reasons.append(f"ネットキャッシュ潤沢(時価総額比{ratio:.0%})")
+            elif ratio >= 0.3:
+                score += 0.05
+                reasons.append(f"ネットキャッシュ(時価総額比{ratio:.0%})")
+
+        # FCF利回り
+        fcf_yield = company.get("fcf_yield")
+        if fcf_yield is not None and fcf_yield >= 0.05:
+            score += 0.05
+            reasons.append(f"FCF利回り高い({fcf_yield:.1%})")
+
+        # アクティビスト株主の存在
+        has_activist = company.get("has_activist")
+        if has_activist:
+            score += 0.1
+            reasons.append("アクティビスト株主あり")
+
+        # アナリストカバレッジ（低いとMBO対象になりやすい）
+        analyst_coverage = company.get("analyst_coverage")
+        if analyst_coverage is not None and analyst_coverage <= 2:
+            score += 0.05
+            reasons.append(f"アナリストカバレッジ少({analyst_coverage}名)")
 
         return score, reasons

@@ -146,6 +146,56 @@ PE_FUND_KEYWORDS = [
     "3Dインベストメント", "3D Investment",
 ]
 
+# === ファンド固有SPC命名パターン（正規表現） ===
+# レポート: PEファンドごとに固有の命名規則がある
+# BCJ-連番（Bain Capital）、エムキャップ○号（丸の内キャピタル）等
+FUND_SPECIFIC_SPC_PATTERNS = [
+    # Bain Capital: BCJ-44, BCJ-48, BCJ-52, BCJ-78, BCJ-98, BACJ-80
+    (r'B?A?CJ[\-\s]?\d+', "Bain Capital系SPC(BCJ-連番)"),
+    # 丸の内キャピタル: エムキャップ○号
+    (r'エムキャップ.{1,4}号', "丸の内キャピタル系SPC(エムキャップ)"),
+    # Bain Capital別パターン: BCPE
+    (r'BCPE[\s\-]', "Bain Capital系SPC(BCPE)"),
+    # ブルーム（EQT系 - ベネッセHD MBO）
+    (r'ブルーム\d*', "EQT系SPC(ブルーム)"),
+    # ボイジャー（Integral系 - ダイオーズ）
+    (r'ボイジャー', "Integral系SPC"),
+    # クリスピー/ジューシー（Carlyle系 - 日本KFC）
+    (r'(クリスピー|ジューシー)', "Carlyle系SPC"),
+]
+
+# === PEファンド・法律事務所オフィス住所（高精度監視対象） ===
+# レポート: 住所監視が最も有力な手法
+PE_OFFICE_ADDRESSES = [
+    # PEファンドオフィス
+    ("千代田区丸の内1-9-2", "Bain Capital / Integral（グラントウキョウサウスタワー）"),
+    ("千代田区丸の内2-6-1", "KKR（丸の内パークビル）"),
+    ("千代田区丸の内1-11-1", "Carlyle（パシフィックセンチュリープレイス）"),
+    ("港区赤坂1-12-32", "MBK Partners（アーク森ビル）"),
+    ("千代田区丸の内3-2-3", "JIP（丸の内二重橋ビル）"),
+    ("千代田区大手町1-9-2", "Polaris Capital（大手町フィナンシャルシティ）"),
+    ("港区六本木6-10-1", "Advantage Partners（六本木ヒルズ）"),
+    # 主要M&A法律事務所
+    ("千代田区丸の内2-6-1", "森・濱田松本法律事務所（丸の内パークビル）"),
+    ("千代田区大手町1-1-2", "西村あさひ法律事務所（大手町三井ビル）"),
+    ("千代田区紀尾井町4-1", "長島・大野・常松法律事務所（ニューオータニガーデンコート）"),
+    ("千代田区大手町1-1-1", "アンダーソン・毛利・友常法律事務所（大手町パークビル）"),
+]
+
+# === MBO候補企業ファンダメンタル条件 ===
+# レポート: ファンダメンタル・スクリーニングとの組み合わせが不可欠
+MBO_FUNDAMENTAL_CRITERIA = {
+    "pbr_threshold": 0.8,           # PBR1倍割れ（特に0.8倍以下）
+    "pbr_extreme_threshold": 0.5,   # PBR極端に低い
+    "owner_ratio_high": 30.0,       # オーナー持株比率高（30%以上）
+    "owner_ratio_mid": 20.0,        # オーナー持株比率中（20%以上）
+    "market_cap_small": 50e9,       # 小型株（500億円以下）
+    "market_cap_mid": 200e9,        # 中型株（2000億円以下）
+    "net_cash_ratio": 0.3,          # ネットキャッシュ比率（時価総額の30%以上）
+    "fcf_yield_threshold": 0.05,    # FCF利回り5%以上
+    "ceo_age_threshold": 65,        # CEO年齢65歳以上
+}
+
 # === 監視スケジュール ===
 # 法人番号APIの新規法人チェック間隔（分）
 NTA_CHECK_INTERVAL_MINUTES = 60

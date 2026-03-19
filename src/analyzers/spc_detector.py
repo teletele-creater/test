@@ -6,6 +6,7 @@ import re
 from config.settings import (
     SPC_NAME_PATTERNS, SPC_ENTITY_TYPES, PE_FUND_KEYWORDS,
     FALSE_POSITIVE_KEYWORDS, FALSE_POSITIVE_PURPOSE_KEYWORDS,
+    FUND_SPECIFIC_SPC_PATTERNS, PE_OFFICE_ADDRESSES,
 )
 from src.utils.logger import setup_logger
 
@@ -21,6 +22,10 @@ class SpcDetector:
         self.pe_keywords = PE_FUND_KEYWORDS
         self.fp_keywords = FALSE_POSITIVE_KEYWORDS
         self.fp_purpose_keywords = FALSE_POSITIVE_PURPOSE_KEYWORDS
+        self.fund_spc_patterns = [
+            (re.compile(pat), desc) for pat, desc in FUND_SPECIFIC_SPC_PATTERNS
+        ]
+        self.pe_office_addresses = PE_OFFICE_ADDRESSES
 
     def analyze(self, corporation: dict) -> dict:
         """
@@ -46,25 +51,31 @@ class SpcDetector:
         score += name_score
         reasons.extend(name_reasons)
 
-        # 3. PEファンド関連チェック
+        # 3. ファンド固有SPC命名パターンチェック（BCJ-連番等）
+        fund_score, fund_reason = self._check_fund_specific_pattern(corporation)
+        score += fund_score
+        if fund_reason:
+            reasons.append(fund_reason)
+
+        # 4. PEファンド関連チェック
         pe_score, pe_reason = self._check_pe_fund_relation(corporation)
         score += pe_score
         if pe_reason:
             reasons.append(pe_reason)
 
-        # 4. 住所チェック（都心のオフィスビルが多い）
+        # 5. 住所チェック（PEオフィス・法律事務所 + 都心エリア）
         addr_score, addr_reason = self._check_address(corporation)
         score += addr_score
         if addr_reason:
             reasons.append(addr_reason)
 
-        # 5. 資本金チェック
+        # 6. 資本金チェック
         cap_score, cap_reason = self._check_capital(corporation)
         score += cap_score
         if cap_reason:
             reasons.append(cap_reason)
 
-        # 6. 偽陽性フィルタ（不動産・太陽光等を減点）
+        # 7. 偽陽性フィルタ（不動産・太陽光等を減点）
         fp_penalty, fp_reason = self._check_false_positive(corporation)
         score += fp_penalty  # 負の値
         if fp_reason:
@@ -120,10 +131,13 @@ class SpcDetector:
             score += 0.1
             reasons.append("英語名のみの法人")
 
-        # 大文字アルファベット略称 + 合同会社（TBJH合同会社、BCPE Gaiaなど）
+        # 大文字アルファベット略称（TBJH合同会社、BCJ-78、PSMホールディングス等）
         # MBO SPCは意味不明な略称を使うことが多い
-        clean_name = re.sub(r'(合同会社|株式会社)', '', name).strip()
-        if re.match(r'^[A-Z]{2,6}(\s|$)', clean_name):
+        clean_name = re.sub(
+            r'(合同会社|株式会社|ホールディングス|HD|インベストメント|キャピタル|パートナーズ)',
+            '', name,
+        ).strip()
+        if re.match(r'^[A-Z]{2,6}(\s|$|[\-\d])', clean_name):
             score += 0.15
             reasons.append(f"アルファベット略称法人名('{clean_name}')")
 
@@ -134,6 +148,14 @@ class SpcDetector:
 
         return min(score, 0.4), reasons
 
+    def _check_fund_specific_pattern(self, corp: dict) -> tuple:
+        """ファンド固有のSPC命名パターン検出（BCJ-連番、エムキャップ○号等）"""
+        name = corp.get("name", "") or ""
+        for pattern, description in self.fund_spc_patterns:
+            if pattern.search(name):
+                return 0.4, f"ファンド固有SPC: {description}"
+        return 0.0, ""
+
     def _check_pe_fund_relation(self, corp: dict) -> tuple:
         """PEファンド関連チェック"""
         text = f"{corp.get('name', '')} {corp.get('purpose', '')} {corp.get('representative', '')}"
@@ -143,12 +165,25 @@ class SpcDetector:
         return 0.0, ""
 
     def _check_address(self, corp: dict) -> tuple:
-        """住所チェック（都心のビジネス街ほど高スコア）"""
-        address = f"{corp.get('prefecture', '')} {corp.get('city', '')} {corp.get('address', '')}"
+        """住所チェック（PEオフィス・法律事務所の住所マッチ + 都心エリア）"""
+        parts = [
+            corp.get('prefecture', '') or '',
+            corp.get('city', '') or '',
+            corp.get('address', '') or '',
+        ]
+        address = " ".join(parts)
+        # スペースなし版も用意（「千代田区丸の内1-9-2」形式でのマッチ用）
+        address_nospace = "".join(parts)
+
+        # 最高精度: PEファンド・M&A法律事務所の具体的住所と一致
+        for pe_addr, pe_name in self.pe_office_addresses:
+            if pe_addr in address or pe_addr in address_nospace:
+                return 0.3, f"PE/法律事務所住所一致: {pe_name}"
 
         # MBO-SPCが多く登記される地域
         high_score_areas = [
             "千代田区丸の内", "千代田区大手町", "千代田区永田町",
+            "千代田区紀尾井町",
             "中央区日本橋", "港区赤坂", "港区六本木", "港区虎ノ門",
         ]
         mid_score_areas = [
