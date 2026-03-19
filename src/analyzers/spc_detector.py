@@ -69,13 +69,19 @@ class SpcDetector:
         if addr_reason:
             reasons.append(addr_reason)
 
-        # 6. 資本金チェック
+        # 6. 事業目的チェック（第4牌: 「株式の取得・保有・管理」）
+        purpose_score, purpose_reason = self._check_acquisition_purpose(corporation)
+        score += purpose_score
+        if purpose_reason:
+            reasons.append(purpose_reason)
+
+        # 7. 資本金チェック
         cap_score, cap_reason = self._check_capital(corporation)
         score += cap_score
         if cap_reason:
             reasons.append(cap_reason)
 
-        # 7. 偽陽性フィルタ（不動産・太陽光等を減点）
+        # 8. 偽陽性フィルタ（不動産・太陽光等を減点）
         fp_penalty, fp_reason = self._check_false_positive(corporation)
         score += fp_penalty  # 負の値
         if fp_reason:
@@ -198,6 +204,46 @@ class SpcDetector:
             if area in address:
                 return 0.05, f"都心部に所在({area})"
 
+        return 0.0, ""
+
+    # 買収目的SPCに典型的な登記簿「目的」欄のキーワード
+    _ACQUISITION_PURPOSE_PATTERNS = [
+        "有価証券の取得",
+        "有価証券の保有",
+        "株式の取得",
+        "株式の保有",
+        "株式の管理",
+        "対象会社の事業活動の支配",
+        "対象会社の事業活動の管理",
+        "企業の買収",
+        "企業買収",
+        "公開買付け",
+        "公開買付",
+        "会社の経営管理",
+        "子会社の経営管理",
+        "議決権の取得",
+        "合併",
+    ]
+
+    def _check_acquisition_purpose(self, corp: dict) -> tuple:
+        """事業目的チェック（第4牌）
+
+        登記簿の「目的」欄に「有価証券の取得、保有及び管理」
+        「対象会社の事業活動の支配及び管理」等と記載されていれば
+        買収用SPCであることが確定的。不動産SPCや証券化SPCとの識別が可能。
+        """
+        purpose = corp.get("purpose", "") or ""
+        if not purpose:
+            return 0.0, ""
+
+        purpose_lower = purpose.lower()
+        matched = []
+        for pattern in self._ACQUISITION_PURPOSE_PATTERNS:
+            if pattern in purpose or pattern.lower() in purpose_lower:
+                matched.append(pattern)
+
+        if matched:
+            return 0.3, f"買収目的SPC(目的欄: '{matched[0]}')"
         return 0.0, ""
 
     def _check_false_positive(self, corp: dict) -> tuple:
