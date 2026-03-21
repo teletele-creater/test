@@ -1,0 +1,39 @@
+name: Options Alert Scan
+
+on:
+  schedule:
+    # 米国市場オープン中（ET 9:30-16:00 = UTC 14:30-21:00）に30分間隔
+    # 新閾値は年数回しか鳴らないので、市場時間中のみで十分
+    - cron: "0,30 14-20 * * 1-5"   # 月〜金、UTC 14:00-20:30
+    - cron: "0 21 * * 1-5"          # UTC 21:00（ET 16:00 終値チェック）
+
+  # 手動実行も可能
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scan
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python main.py scan
