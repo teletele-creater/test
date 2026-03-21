@@ -1,8 +1,10 @@
 """
 通知モジュール
 
-Discord, LINE Notify, Email, Slack に対応した通知システム。
+Discord, LINE Messaging API, Email, Slack に対応した通知システム。
 .envファイルで設定されたチャネルに自動送信する。
+
+LINE Notifyは2025年3月末で終了。代替としてLINE Messaging APIを使用。
 """
 
 import json
@@ -25,7 +27,8 @@ class Notifier:
 
     def __init__(self):
         self.discord_url = os.getenv("DISCORD_WEBHOOK_URL")
-        self.line_token = os.getenv("LINE_NOTIFY_TOKEN")
+        self.line_channel_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+        self.line_user_id = os.getenv("LINE_USER_ID")
         self.email_sender = os.getenv("EMAIL_SENDER")
         self.email_password = os.getenv("EMAIL_PASSWORD")
         self.email_recipient = os.getenv("EMAIL_RECIPIENT")
@@ -34,7 +37,7 @@ class Notifier:
         self._channels = []
         if self.discord_url:
             self._channels.append("Discord")
-        if self.line_token:
+        if self.line_channel_token and self.line_user_id:
             self._channels.append("LINE")
         if self.email_sender and self.email_password and self.email_recipient:
             self._channels.append("Email")
@@ -61,8 +64,8 @@ class Notifier:
 
         if self.discord_url:
             self._send_discord(title, summary)
-        if self.line_token:
-            self._send_line(summary)
+        if self.line_channel_token and self.line_user_id:
+            self._send_line(title, summary)
         if self.email_sender:
             self._send_email(title, summary)
         if self.slack_url:
@@ -118,15 +121,23 @@ class Notifier:
         except Exception as e:
             logger.error(f"Discord notification failed: {e}")
 
-    def _send_line(self, message: str) -> None:
-        """LINE Notifyに送信"""
+    def _send_line(self, title: str, message: str) -> None:
+        """LINE Messaging APIでプッシュメッセージを送信"""
         try:
-            headers = {"Authorization": f"Bearer {self.line_token}"}
-            payload = {"message": f"\n{message[:900]}"}  # LINE Notifyは1000文字制限
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.line_channel_token}",
+            }
+            # 5000文字制限
+            text = f"{title}\n\n{message[:4900]}"
+            payload = {
+                "to": self.line_user_id,
+                "messages": [{"type": "text", "text": text}],
+            }
             resp = requests.post(
-                "https://notify-api.line.me/api/notify",
+                "https://api.line.me/v2/bot/message/push",
                 headers=headers,
-                data=payload,
+                json=payload,
                 timeout=10,
             )
             resp.raise_for_status()
@@ -182,8 +193,8 @@ class Notifier:
 
         if self.discord_url:
             self._send_discord("Test", test_msg)
-        if self.line_token:
-            self._send_line(test_msg)
+        if self.line_channel_token and self.line_user_id:
+            self._send_line("Test", test_msg)
         if self.email_sender:
             self._send_email("Test Notification", test_msg)
         if self.slack_url:
