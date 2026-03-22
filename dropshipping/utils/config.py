@@ -46,14 +46,50 @@ class MonitorConfig:
     discord_webhook_url: str = field(
         default_factory=lambda: os.getenv("DISCORD_WEBHOOK_URL", "")
     )
-    # LINE Notify トークン
-    line_notify_token: str = field(
-        default_factory=lambda: os.getenv("LINE_NOTIFY_TOKEN", "")
+    # LINE Messaging API（LINE Notifyは2025年3月末で廃止済み）
+    line_channel_access_token: str = field(
+        default_factory=lambda: os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
+    )
+    line_user_id: str = field(
+        default_factory=lambda: os.getenv("LINE_USER_ID", "")
     )
     # 通知方法: "discord", "line", "both"
     notification_method: str = field(
         default_factory=lambda: os.getenv("NOTIFICATION_METHOD", "discord")
     )
+
+    def validate(self) -> list[str]:
+        """通知設定のバリデーション。問題があればエラーメッセージのリストを返す"""
+        errors = []
+        method = self.notification_method
+
+        if method not in ("discord", "line", "both"):
+            errors.append(
+                f"NOTIFICATION_METHOD が無効です: '{method}' "
+                f"(有効値: discord, line, both)"
+            )
+
+        if method in ("discord", "both") and not self.discord_webhook_url:
+            errors.append(
+                "DISCORD_WEBHOOK_URL が未設定です。"
+                "Discord通知を使う場合は .env に設定してください。"
+            )
+
+        if method in ("line", "both"):
+            if not self.line_channel_access_token:
+                errors.append(
+                    "LINE_CHANNEL_ACCESS_TOKEN が未設定です。"
+                    "LINE通知を使う場合は .env に設定してください。"
+                    "※ LINE Notifyは2025年3月末で廃止されました。"
+                    "LINE Messaging API (Bot) を使用してください。"
+                )
+            if not self.line_user_id:
+                errors.append(
+                    "LINE_USER_ID が未設定です。"
+                    "LINE通知の送信先ユーザーIDを .env に設定してください。"
+                )
+
+        return errors
 
 
 @dataclass

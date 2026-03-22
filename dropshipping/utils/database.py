@@ -59,6 +59,8 @@ def init_db():
                         'sold',         -- 販売完了
                         'archived'      -- アーカイブ
                     )),
+                -- 直前のステータス（ステータス遷移追跡用）
+                previous_status TEXT,
                 -- メタデータ
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -98,6 +100,11 @@ def init_db():
                 FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
             );
         """)
+        # 既存DBにprevious_statusカラムがない場合は追加
+        try:
+            conn.execute("SELECT previous_status FROM items LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute("ALTER TABLE items ADD COLUMN previous_status TEXT")
 
 
 def upsert_item(
@@ -157,21 +164,32 @@ def get_listed_items() -> list[dict]:
 
 
 def get_out_of_stock_listed_items() -> list[dict]:
-    """在庫なし＆出品中の商品一覧を取得"""
+    """在庫なし＆元々出品中だった商品一覧を取得
+
+    status='out_of_stock' かつ previous_status='listed' の商品のみ返す。
+    リサーチしただけの商品（researched → out_of_stock）は含まない。
+    """
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT * FROM items WHERE status = 'out_of_stock' ORDER BY id"
+            """SELECT * FROM items
+               WHERE status = 'out_of_stock'
+                 AND previous_status = 'listed'
+               ORDER BY id""",
         ).fetchall()
         return [dict(row) for row in rows]
 
 
-def update_item_status(item_id: int, status: str):
-    """商品のステータスを更新"""
+def update_item_status(item_id: int, new_status: str):
+    """商品のステータスを更新（直前のステータスも保持）"""
     now = datetime.now().isoformat()
     with get_connection() as conn:
         conn.execute(
-            "UPDATE items SET status = ?, updated_at = ? WHERE id = ?",
-            (status, now, item_id),
+            """UPDATE items
+               SET previous_status = status,
+                   status = ?,
+                   updated_at = ?
+               WHERE id = ?""",
+            (new_status, now, item_id),
         )
 
 
@@ -224,3 +242,14 @@ def get_all_items() -> list[dict]:
             "SELECT * FROM items ORDER BY created_at DESC"
         ).fetchall()
         return [dict(row) for row in rows]
+
+
+def is_already_notified(item_id: int, notification_type: str) -> bool:
+    """同じ商品に対して同じ種類の通知が既に送信済みかチェック（重複通知防止）"""
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT COUNT(*) as cnt FROM notifications
+               WHERE item_id = ? AND notification_type = ? AND success = 1""",
+            (item_id, notification_type),
+        ).fetchone()
+        return row["cnt"] > 0

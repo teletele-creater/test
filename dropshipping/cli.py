@@ -5,6 +5,7 @@
     # フェーズ1: 価格差リサーチ
     python -m dropshipping research --urls "URL1,URL2,..."
     python -m dropshipping research --keyword "検索キーワード"
+    python -m dropshipping research --keyword "充電器" --min-profit 5000
 
     # フェーズ2: 在庫監視
     python -m dropshipping monitor           # 単発チェック
@@ -39,6 +40,10 @@ def cmd_research(args):
     """フェーズ1: 価格差リサーチ"""
     from .scrapers.researcher import research_keyword, research_urls
 
+    # --min-profit を反映（researcherが使う前に設定）
+    if args.min_profit is not None:
+        config.profit.min_profit_threshold = args.min_profit
+
     init_db()
 
     if args.keyword:
@@ -70,6 +75,15 @@ def cmd_research(args):
 def cmd_monitor(args):
     """フェーズ2: 在庫監視"""
     from .monitors.stock_monitor import run_stock_check, start_monitoring
+
+    # 通知設定のバリデーション
+    errors = config.monitor.validate()
+    if errors:
+        print("通知設定に問題があります:")
+        for err in errors:
+            print(f"  - {err}")
+        print("\n.envファイルを確認してください。")
+        sys.exit(1)
 
     init_db()
 
@@ -180,10 +194,6 @@ def main():
     if not args.command:
         parser.print_help()
         sys.exit(0)
-
-    # min-profitの反映
-    if hasattr(args, "min_profit") and args.min_profit is not None:
-        config.profit.min_profit_threshold = args.min_profit
 
     args.func(args)
 

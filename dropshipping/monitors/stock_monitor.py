@@ -3,6 +3,11 @@
 
 DBに登録された「出品中（listed）」の商品について、
 Amazonの在庫状況を定期的にチェックし、在庫切れ時に通知を送る。
+
+改善点:
+- 利益がしきい値未満の商品は通知をスキップ
+- 同じ商品への重複通知を防止
+- ページ読み込みエラー時のリトライ処理
 """
 
 import asyncio
@@ -14,18 +19,21 @@ from ..utils.config import config
 from ..utils.database import (
     get_listed_items,
     init_db,
+    is_already_notified,
     update_item_status,
     update_stock_status,
 )
-from ..utils.helpers import get_logger, scraping_delay
+from ..utils.helpers import format_price, get_logger, scraping_delay
 from .notifier import send_notification
 
 logger = get_logger(__name__)
 
+MAX_PAGE_RETRIES = 2
+
 
 async def check_single_item(page, item: dict) -> bool | None:
     """
-    単一商品の在庫をチェック
+    単一商品の在庫をチェック（リトライ付き）
 
     Returns:
         True: 在庫あり, False: 在庫なし, None: チェック失敗
@@ -33,17 +41,23 @@ async def check_single_item(page, item: dict) -> bool | None:
     url = item["amazon_url"]
     title = item["amazon_title"] or "(タイトル不明)"
 
-    try:
-        logger.info(f"在庫チェック中: {title}")
-        await page.goto(url, timeout=config.scraping.page_timeout, wait_until="domcontentloaded")
-        await scraping_delay(config.scraping.min_delay, config.scraping.max_delay)
+    for attempt in range(MAX_PAGE_RETRIES + 1):
+        try:
+            logger.info(f"在庫チェック中: {title}")
+            await page.goto(url, timeout=config.scraping.page_timeout, wait_until="domcontentloaded")
+            await scraping_delay(config.scraping.min_delay, config.scraping.max_delay)
 
-        in_stock = await _check_stock(page)
-        return in_stock
+            in_stock = await _check_stock(page)
+            return in_stock
 
-    except Exception as e:
-        logger.error(f"在庫チェック中にエラー: {title} - {e}")
-        return None
+        except Exception as e:
+            if attempt < MAX_PAGE_RETRIES:
+                wait = 2 ** (attempt + 1)
+                logger.warning(f"在庫チェック失敗（リトライ {attempt + 1}/{MAX_PAGE_RETRIES}）: {title} - {e}")
+                await asyncio.sleep(wait)
+            else:
+                logger.error(f"在庫チェック失敗（リトライ上限）: {title} - {e}")
+                return None
 
 
 async def run_stock_check():
@@ -81,26 +95,40 @@ async def run_stock_check():
             item_id = item["id"]
             title = item["amazon_title"] or "(タイトル不明)"
             url = item["amazon_url"]
+            profit = item.get("estimated_profit") or 0
 
             # 在庫チェック履歴を記録
             update_stock_status(item_id, in_stock)
 
             if not in_stock:
                 out_of_stock_count += 1
-                logger.warning(f"⚠️ 在庫切れ検出: {title}")
+                logger.warning(f"在庫切れ検出: {title}")
 
                 # ステータスを「在庫なし」に更新
                 update_item_status(item_id, "out_of_stock")
+
+                # 利益がしきい値未満の商品は通知しない
+                if profit < config.profit.min_profit_threshold:
+                    logger.info(
+                        f"通知スキップ（利益基準未満: {format_price(profit)}）: {title}"
+                    )
+                    continue
+
+                # 同じ商品への重複通知を防止
+                if is_already_notified(item_id, "out_of_stock"):
+                    logger.info(f"通知スキップ（通知済み）: {title}")
+                    continue
 
                 # 通知を送信
                 message = (
                     f"【警告】在庫切れ：{title}\n"
                     f"URL: {url}\n"
+                    f"推定利益: {format_price(profit)}\n"
                     f"メルカリでの出品停止を推奨します。"
                 )
-                await send_notification(item_id, message)
+                await send_notification(item_id, message, notification_type="out_of_stock")
             else:
-                logger.info(f"✅ 在庫あり: {title}")
+                logger.info(f"在庫あり: {title}")
 
             await scraping_delay(config.scraping.min_delay, config.scraping.max_delay)
 

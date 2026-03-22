@@ -1,5 +1,6 @@
 """Amazon商品情報スクレイパー（Playwright使用）"""
 
+import asyncio
 import re
 from dataclasses import dataclass
 
@@ -7,6 +8,8 @@ from playwright.async_api import Page, async_playwright
 
 from ..utils.config import config
 from ..utils.helpers import extract_asin, get_logger, scraping_delay
+
+MAX_PAGE_RETRIES = 2
 
 logger = get_logger(__name__)
 
@@ -109,9 +112,19 @@ async def scrape_amazon_product(url: str, page: Page | None = None) -> AmazonPro
         page = await context.new_page()
 
     try:
-        logger.info(f"Amazon商品ページにアクセス中: {url}")
-        await page.goto(url, timeout=config.scraping.page_timeout, wait_until="domcontentloaded")
-        await scraping_delay(config.scraping.min_delay, config.scraping.max_delay)
+        for attempt in range(MAX_PAGE_RETRIES + 1):
+            try:
+                logger.info(f"Amazon商品ページにアクセス中: {url}")
+                await page.goto(url, timeout=config.scraping.page_timeout, wait_until="domcontentloaded")
+                await scraping_delay(config.scraping.min_delay, config.scraping.max_delay)
+                break  # 成功
+            except Exception as e:
+                if attempt < MAX_PAGE_RETRIES:
+                    wait = 2 ** (attempt + 1)
+                    logger.warning(f"ページ読み込み失敗（リトライ {attempt + 1}/{MAX_PAGE_RETRIES}）: {e}")
+                    await asyncio.sleep(wait)
+                else:
+                    raise
 
         # 商品タイトルの取得
         title_selectors = ["#productTitle", "#title span"]
