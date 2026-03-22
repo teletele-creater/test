@@ -8,7 +8,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+# dropshipping/ パッケージのルート
+_PACKAGE_DIR = Path(__file__).resolve().parent.parent
+# プロジェクトルート（dropshipping/ の親ディレクトリ）
+BASE_DIR = _PACKAGE_DIR.parent
 DB_PATH = BASE_DIR / "items.db"
 
 
