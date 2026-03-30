@@ -61,6 +61,9 @@ class StockData:
     forward_pe: float | None  # 予想PER
     historical_pes: pd.Series | None  # 過去のPER推移
 
+    # 株価系列（底打ち確認用、オプション）
+    price_history: pd.Series | None = None  # 月次終値
+
     timestamp: datetime = field(default_factory=datetime.now)
 
 
@@ -473,6 +476,65 @@ def check_rule3_per_range(data: StockData, rules: ScreeningRules) -> RuleResult:
     )
 
 
+def check_rule4_momentum(data: StockData, rules: ScreeningRules) -> RuleResult:
+    """
+    ルール④: 底打ち確認（モメンタムフィルター）
+
+    「落ちるナイフを掴まない」ための安全装置。
+    直近N月の最安値から一定%反発していることを確認する。
+    """
+    if not rules.use_momentum_filter:
+        return RuleResult(
+            rule_name="④ 底打ち確認（モメンタム）",
+            passed=True,
+            current_value="フィルター無効",
+            threshold="--",
+            detail="momentum_filter無効のためスキップ",
+        )
+
+    if data.price_history is None or len(data.price_history) < rules.momentum_lookback_months:
+        return RuleResult(
+            rule_name="④ 底打ち確認（モメンタム）",
+            passed=False,
+            current_value="データ不足",
+            threshold=f"安値から+{rules.momentum_rebound_pct:.0f}%以上",
+            detail="株価系列が不足",
+        )
+
+    recent = data.price_history.iloc[-rules.momentum_lookback_months:]
+    recent_low = float(recent.min())
+    current = float(recent.iloc[-1])
+
+    if recent_low <= 0:
+        return RuleResult(
+            rule_name="④ 底打ち確認（モメンタム）",
+            passed=False,
+            current_value="異常データ",
+            threshold=f"安値から+{rules.momentum_rebound_pct:.0f}%以上",
+        )
+
+    rebound_pct = (current - recent_low) / recent_low * 100
+    passed = rebound_pct >= rules.momentum_rebound_pct
+
+    # 最安値がいつだったか
+    low_idx = recent.idxmin()
+    low_date = low_idx.strftime("%Y-%m") if hasattr(low_idx, "strftime") else str(low_idx)
+
+    detail = (
+        f"直近{rules.momentum_lookback_months}月安値: ¥{recent_low:,.0f} ({low_date})"
+        f" → 現在: ¥{current:,.0f}"
+        f" | 反発: {rebound_pct:+.1f}% ({'≥' if passed else '<'} {rules.momentum_rebound_pct:.0f}%)"
+    )
+
+    return RuleResult(
+        rule_name="④ 底打ち確認（モメンタム）",
+        passed=passed,
+        current_value=f"反発 {rebound_pct:+.1f}%",
+        threshold=f"安値から+{rules.momentum_rebound_pct:.0f}%以上",
+        detail=detail,
+    )
+
+
 # ============================================================
 # メインスクリーニング
 # ============================================================
@@ -482,6 +544,7 @@ def screen_stock(data: StockData, rules: ScreeningRules | None = None) -> Screen
     if rules is None:
         rules = ScreeningRules()
 
+    # 基本3ルール
     rule_results = [
         check_rule1_yield(data, rules),
         check_rule2_growth_peg(data, rules),
@@ -491,13 +554,21 @@ def screen_stock(data: StockData, rules: ScreeningRules | None = None) -> Screen
     passed_count = sum(1 for r in rule_results if r.passed)
     is_entry = passed_count >= rules.min_rules_passed
 
+    # ルール④: 底打ち確認（基本3条件を満たした場合のみ適用）
+    if rules.use_momentum_filter:
+        momentum_result = check_rule4_momentum(data, rules)
+        rule_results.append(momentum_result)
+        # 基本3条件クリア && 底打ち確認OK → エントリー
+        if is_entry and not momentum_result.passed:
+            is_entry = False
+
     return ScreeningResult(
         symbol=data.symbol,
         name=data.name,
         sector=data.sector,
         rules=rule_results,
         is_entry_zone=is_entry,
-        rules_passed=passed_count,
+        rules_passed=passed_count + (1 if rules.use_momentum_filter and len(rule_results) > 3 and rule_results[3].passed else 0),
         rules_total=len(rule_results),
     )
 

@@ -50,6 +50,33 @@ def make_historical_yields(
     return pd.Series(values, index=dates).clip(lower=0.5)
 
 
+def make_price_history(
+    current_price: float = 2000,
+    low_price: float = 1600,
+    months: int = 12,
+) -> pd.Series:
+    """底値から反発する株価推移を生成"""
+    dates = pd.date_range(end=datetime.now(), periods=months, freq="ME")
+    n = len(dates)
+    # 前半で下がって後半で回復するパターン
+    bottom_idx = n // 2
+    prices = np.zeros(n)
+    prices[:bottom_idx] = np.linspace(current_price * 0.9, low_price, bottom_idx)
+    prices[bottom_idx:] = np.linspace(low_price, current_price, n - bottom_idx)
+    return pd.Series(prices, index=dates)
+
+
+def make_declining_price_history(
+    current_price: float = 800,
+    months: int = 12,
+) -> pd.Series:
+    """下落し続ける株価推移"""
+    dates = pd.date_range(end=datetime.now(), periods=months, freq="ME")
+    n = len(dates)
+    prices = np.linspace(current_price * 1.5, current_price, n)
+    return pd.Series(prices, index=dates)
+
+
 def make_historical_pes(
     base: float = 18.0,
     current_price: float = 2000,
@@ -95,6 +122,7 @@ def create_entry_zone_stock() -> StockData:
         trailing_pe=9.1,  # 低PER（株価下落で）
         forward_pe=8.0,
         historical_pes=make_historical_pes(base=18.0, current_price=2000, eps=220),
+        price_history=make_price_history(current_price=2000, low_price=1600),
     )
 
 
@@ -127,6 +155,7 @@ def create_growth_no_value_stock() -> StockData:
         trailing_pe=25.0,  # 高PER
         forward_pe=20.0,
         historical_pes=make_historical_pes(base=25.0, current_price=5000, eps=200),
+        price_history=make_price_history(current_price=5000, low_price=4500),
     )
 
 
@@ -159,6 +188,7 @@ def create_high_yield_no_growth_stock() -> StockData:
         trailing_pe=15.0,
         forward_pe=14.5,
         historical_pes=make_historical_pes(base=16.0, current_price=1500, eps=100),
+        price_history=make_declining_price_history(current_price=1500),
     )
 
 
@@ -191,6 +221,7 @@ def create_declining_stock() -> StockData:
         trailing_pe=53.3,
         forward_pe=40.0,
         historical_pes=make_historical_pes(base=15.0, current_price=800, eps=15),
+        price_history=make_declining_price_history(current_price=800),
     )
 
 
@@ -223,6 +254,7 @@ def create_eps_divergence_stock() -> StockData:
         trailing_pe=23.1,
         forward_pe=18.0,
         historical_pes=make_historical_pes(base=20.0, current_price=3000, eps=130),
+        price_history=make_price_history(current_price=3000, low_price=2400),
     )
 
 
