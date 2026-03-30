@@ -148,48 +148,180 @@ SHAREHOLDER_BENEFITS: dict[str, dict] = {
                "description": "JAL 株主優待割引券（片道50%OFF換算）"},
     "4661.T": {"value_yen": 8000, "min_shares": 100,
                "description": "OLC（ディズニー）1デーパスポート"},
-    # --- その他 ---
-    "8058.T": {"value_yen": 0, "min_shares": 100,
-               "description": "三菱商事 優待なし"},
-    "8306.T": {"value_yen": 0, "min_shares": 100,
-               "description": "三菱UFJ 優待なし"},
-    "7203.T": {"value_yen": 0, "min_shares": 100,
-               "description": "トヨタ 優待なし"},
-    "6758.T": {"value_yen": 0, "min_shares": 100,
-               "description": "ソニー 優待なし"},
-    "7267.T": {"value_yen": 0, "min_shares": 100,
-               "description": "ホンダ 優待なし"},
-    "8766.T": {"value_yen": 0, "min_shares": 100,
-               "description": "東京海上 優待なし"},
+    # --- 1489構成銘柄（優待なし） ---
+    "1605.T": {"value_yen": 0, "min_shares": 100,
+               "description": "INPEX 優待なし"},
+    "1801.T": {"value_yen": 0, "min_shares": 100,
+               "description": "大成建設 優待なし"},
+    "1812.T": {"value_yen": 0, "min_shares": 100,
+               "description": "鹿島建設 優待なし"},
+    "1928.T": {"value_yen": 0, "min_shares": 100,
+               "description": "積水ハウス 優待なし"},
+    "3407.T": {"value_yen": 0, "min_shares": 100,
+               "description": "旭化成 優待なし"},
+    "3861.T": {"value_yen": 0, "min_shares": 100,
+               "description": "王子HD 優待なし"},
+    "4183.T": {"value_yen": 0, "min_shares": 100,
+               "description": "三井化学 優待なし"},
+    "4188.T": {"value_yen": 0, "min_shares": 100,
+               "description": "三菱ケミカルG 優待なし"},
+    "4324.T": {"value_yen": 0, "min_shares": 100,
+               "description": "電通グループ 優待なし"},
     "4502.T": {"value_yen": 0, "min_shares": 100,
                "description": "武田薬品 優待なし"},
+    "4503.T": {"value_yen": 0, "min_shares": 100,
+               "description": "アステラス製薬 優待なし"},
+    "5019.T": {"value_yen": 0, "min_shares": 100,
+               "description": "出光興産 優待なし"},
+    "5020.T": {"value_yen": 0, "min_shares": 100,
+               "description": "ENEOS HD 優待なし"},
+    "5108.T": {"value_yen": 0, "min_shares": 100,
+               "description": "ブリヂストン 優待なし"},
+    "5201.T": {"value_yen": 0, "min_shares": 100,
+               "description": "AGC 優待なし"},
+    "5401.T": {"value_yen": 0, "min_shares": 100,
+               "description": "日本製鉄 優待なし"},
+    "5406.T": {"value_yen": 0, "min_shares": 100,
+               "description": "神戸製鋼所 優待なし"},
+    "5411.T": {"value_yen": 0, "min_shares": 100,
+               "description": "JFE HD 優待なし"},
+    "5713.T": {"value_yen": 0, "min_shares": 100,
+               "description": "住友金属鉱山 優待なし"},
+    "6301.T": {"value_yen": 0, "min_shares": 100,
+               "description": "コマツ 優待なし"},
+    "6305.T": {"value_yen": 0, "min_shares": 100,
+               "description": "日立建機 優待なし"},
+    "6471.T": {"value_yen": 0, "min_shares": 100,
+               "description": "日本精工 優待なし"},
+    "6472.T": {"value_yen": 0, "min_shares": 100,
+               "description": "NTN 優待なし"},
+    "6473.T": {"value_yen": 0, "min_shares": 100,
+               "description": "ジェイテクト 優待なし"},
+    "7202.T": {"value_yen": 0, "min_shares": 100,
+               "description": "いすゞ自動車 優待なし"},
+    "7261.T": {"value_yen": 0, "min_shares": 100,
+               "description": "マツダ 優待なし"},
+    "7267.T": {"value_yen": 0, "min_shares": 100,
+               "description": "ホンダ 優待なし"},
+    "7272.T": {"value_yen": 0, "min_shares": 100,
+               "description": "ヤマハ発動機 優待なし"},
+    "7751.T": {"value_yen": 0, "min_shares": 100,
+               "description": "キヤノン 優待なし"},
+    "8001.T": {"value_yen": 0, "min_shares": 100,
+               "description": "伊藤忠商事 優待なし"},
+    "8002.T": {"value_yen": 0, "min_shares": 100,
+               "description": "丸紅 優待なし"},
+    "8015.T": {"value_yen": 0, "min_shares": 100,
+               "description": "豊田通商 優待なし"},
+    "8053.T": {"value_yen": 0, "min_shares": 100,
+               "description": "住友商事 優待なし"},
+    "8058.T": {"value_yen": 0, "min_shares": 100,
+               "description": "三菱商事 優待なし"},
+    "8304.T": {"value_yen": 0, "min_shares": 100,
+               "description": "あおぞら銀行 優待なし"},
+    "8308.T": {"value_yen": 0, "min_shares": 100,
+               "description": "りそなHD 優待なし"},
+    "8309.T": {"value_yen": 0, "min_shares": 100,
+               "description": "三井住友トラストHD 優待なし"},
+    "8316.T": {"value_yen": 0, "min_shares": 100,
+               "description": "三井住友FG 優待なし"},
+    "8411.T": {"value_yen": 0, "min_shares": 100,
+               "description": "みずほFG 優待なし"},
+    "8473.T": {"value_yen": 0, "min_shares": 100,
+               "description": "SBI HD 優待なし"},
+    "8601.T": {"value_yen": 0, "min_shares": 100,
+               "description": "大和証券グループ 優待なし"},
+    "8604.T": {"value_yen": 0, "min_shares": 100,
+               "description": "野村HD 優待なし"},
+    "8725.T": {"value_yen": 0, "min_shares": 100,
+               "description": "MS&AD 優待なし"},
+    "9101.T": {"value_yen": 0, "min_shares": 100,
+               "description": "日本郵船 優待なし"},
+    "9107.T": {"value_yen": 0, "min_shares": 100,
+               "description": "川崎汽船 優待なし"},
+    "9434.T": {"value_yen": 0, "min_shares": 100,
+               "description": "ソフトバンク 優待なし"},
 }
 
 # スクリーニング対象銘柄リスト
+# ====================================================================
+# 日経平均高配当株50指数（1489 ETF）構成銘柄ベース
+# - 2025年6月定期見直し後の50銘柄から開始
+# - 2025年9月: シチズン(7762)臨時除外
+# - 2026年3月: カシオ(6952)臨時除外
+# → 現在48銘柄で算出中。次回定期見直しは2026年6月末
+#
+# ※公式リスト: https://indexes.nikkei.co.jp/nkave/index/component?idx=nk225hdy
+# ※検索結果・ファクトシート・入替ニュースから構築。要定期確認。
+# ====================================================================
 SCREENING_WATCHLIST: list[str] = [
-    # --- 高配当・優待銘柄 ---
-    "2914.T",   # JT（高配当+優待）
-    "9433.T",   # KDDI（配当+優待）
-    "9432.T",   # NTT（配当+dポイント）
-    "8058.T",   # 三菱商事（高配当）
-    "8306.T",   # 三菱UFJ（高配当）
-    "8766.T",   # 東京海上（高配当）
-    # --- 成長+配当 ---
-    "7203.T",   # トヨタ自動車
-    "6758.T",   # ソニー
-    "7267.T",   # ホンダ
-    "4502.T",   # 武田薬品
-    # --- 優待人気銘柄 ---
-    "2702.T",   # マクドナルド
-    "3543.T",   # コメダHD
-    "7550.T",   # ゼンショーHD
-    "8267.T",   # イオン
-    "4452.T",   # 花王
-    "2503.T",   # キリンHD
-    # --- 米国高配当 ---
-    "JNJ",
-    "PG",
-    "KO",
-    "ABBV",
-    "MO",
+    # === 鉱業・エネルギー ===
+    "1605.T",   # INPEX（ウェート1位）
+    "5020.T",   # ENEOS HD
+    "5019.T",   # 出光興産
+    # === 建設 ===
+    "1928.T",   # 積水ハウス
+    "1812.T",   # 鹿島建設
+    "1801.T",   # 大成建設
+    # === 食品 ===
+    "2914.T",   # JT 日本たばこ産業（ウェート6位）
+    # === 紙・パルプ ===
+    "3861.T",   # 王子HD（2025年6月追加）
+    # === 化学 ===
+    "4188.T",   # 三菱ケミカルG
+    "4183.T",   # 三井化学
+    "3407.T",   # 旭化成
+    # === 医薬品 ===
+    "4502.T",   # 武田薬品工業（ウェート5位）
+    "4503.T",   # アステラス製薬（ウェート3位）
+    # === ゴム ===
+    "5108.T",   # ブリヂストン
+    # === ガラス・土石 ===
+    "5201.T",   # AGC
+    # === 鉄鋼 ===
+    "5401.T",   # 日本製鉄
+    "5406.T",   # 神戸製鋼所
+    "5411.T",   # JFE HD
+    # === 非鉄金属 ===
+    "5713.T",   # 住友金属鉱山
+    # === 機械 ===
+    "6301.T",   # コマツ（小松製作所）
+    "6305.T",   # 日立建機
+    "6471.T",   # 日本精工
+    "6472.T",   # NTN（2025年6月追加）
+    "6473.T",   # ジェイテクト（2025年6月追加）
+    # === 電気機器 ===
+    "7751.T",   # キヤノン
+    # === 輸送用機器 ===
+    "7202.T",   # いすゞ自動車
+    "7261.T",   # マツダ（2025年6月追加）
+    "7267.T",   # 本田技研工業
+    "7272.T",   # ヤマハ発動機（2025年6月追加）
+    # === サービス ===
+    "4324.T",   # 電通グループ（2025年6月追加）
+    # === 卸売（商社） ===
+    "8001.T",   # 伊藤忠商事
+    "8002.T",   # 丸紅
+    "8015.T",   # 豊田通商
+    "8053.T",   # 住友商事（ウェート10位）
+    "8058.T",   # 三菱商事（ウェート8位）
+    # === 銀行 ===
+    "8304.T",   # あおぞら銀行
+    "8308.T",   # りそなHD
+    "8309.T",   # 三井住友トラストHD
+    "8316.T",   # 三井住友FG（ウェート7位）
+    "8411.T",   # みずほFG（ウェート2位）
+    # === 証券 ===
+    "8473.T",   # SBI HD
+    "8601.T",   # 大和証券グループ
+    "8604.T",   # 野村HD（ウェート4位、2025年6月追加）
+    # === 保険 ===
+    "8725.T",   # MS&AD インシュアランスG
+    # === 海運 ===
+    "9101.T",   # 日本郵船
+    "9107.T",   # 川崎汽船（ウェート9位）
+    # === 通信 ===
+    "9433.T",   # KDDI
+    "9434.T",   # ソフトバンク
+    # === 合計: 48銘柄 ===
 ]
