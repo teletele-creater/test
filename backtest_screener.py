@@ -26,7 +26,9 @@ import pandas as pd
 
 from screener_config import (
     DEFAULT_SECTOR_GROWTH_RATE,
+    SCREENING_WATCHLIST,
     SECTOR_BENCHMARKS,
+    SHAREHOLDER_BENEFITS,
     ScreeningRules,
 )
 from stock_screener import (
@@ -205,6 +207,250 @@ SIMULATED_STOCKS = [
         min_shares=100, op_income_base=12e9, op_growth_annual=4.0,
         eps_growth_annual=3.0, price_trend="volatile", fair_pe=10.0,
     ),
+]
+
+
+# ============================================================
+# 1489 ETF 構成銘柄シミュレーション（48銘柄）
+# 実際の業種・配当水準・成長率を反映したパラメータ
+# ============================================================
+
+def _ben(sym: str) -> float:
+    """SHAREHOLDER_BENEFITSから優待額を取得"""
+    return SHAREHOLDER_BENEFITS.get(sym, {}).get("value_yen", 0)
+
+SIMULATED_1489_STOCKS = [
+    # === 鉱業・エネルギー ===
+    SimulatedStock("1605.T", "INPEX", "Energy",
+                   base_price=2200, base_eps=200, annual_dividend=86, benefit_value=_ben("1605.T"),
+                   min_shares=100, op_income_base=500e9, op_growth_annual=8.0,
+                   eps_growth_annual=7.0, price_trend="volatile", fair_pe=10.0),
+    SimulatedStock("5020.T", "ENEOS HD", "Energy",
+                   base_price=800, base_eps=60, annual_dividend=26, benefit_value=_ben("5020.T"),
+                   min_shares=100, op_income_base=350e9, op_growth_annual=5.0,
+                   eps_growth_annual=4.0, price_trend="volatile", fair_pe=12.0),
+    SimulatedStock("5019.T", "出光興産", "Energy",
+                   base_price=1100, base_eps=110, annual_dividend=40, benefit_value=_ben("5019.T"),
+                   min_shares=100, op_income_base=250e9, op_growth_annual=4.0,
+                   eps_growth_annual=3.0, price_trend="volatile", fair_pe=10.0),
+
+    # === 建設 ===
+    SimulatedStock("1928.T", "積水ハウス", "Real Estate",
+                   base_price=3400, base_eps=230, annual_dividend=123, benefit_value=_ben("1928.T"),
+                   min_shares=100, op_income_base=200e9, op_growth_annual=7.0,
+                   eps_growth_annual=6.0, price_trend="crash_recover", fair_pe=13.0),
+    SimulatedStock("1812.T", "鹿島建設", "Industrials",
+                   base_price=2800, base_eps=260, annual_dividend=100, benefit_value=_ben("1812.T"),
+                   min_shares=100, op_income_base=150e9, op_growth_annual=8.0,
+                   eps_growth_annual=7.0, price_trend="crash_recover", fair_pe=11.0),
+    SimulatedStock("1801.T", "大成建設", "Industrials",
+                   base_price=5500, base_eps=350, annual_dividend=150, benefit_value=_ben("1801.T"),
+                   min_shares=100, op_income_base=100e9, op_growth_annual=6.0,
+                   eps_growth_annual=5.0, price_trend="crash_recover", fair_pe=14.0),
+
+    # === 食品 ===
+    SimulatedStock("2914.T", "JT", "Consumer Defensive",
+                   base_price=4200, base_eps=250, annual_dividend=194, benefit_value=_ben("2914.T"),
+                   min_shares=100, op_income_base=600e9, op_growth_annual=6.0,
+                   eps_growth_annual=5.0, price_trend="crash_recover", fair_pe=15.0),
+
+    # === 紙・パルプ ===
+    SimulatedStock("3861.T", "王子HD", "Basic Materials",
+                   base_price=600, base_eps=40, annual_dividend=22, benefit_value=_ben("3861.T"),
+                   min_shares=100, op_income_base=80e9, op_growth_annual=5.0,
+                   eps_growth_annual=4.0, price_trend="volatile", fair_pe=14.0),
+
+    # === 化学 ===
+    SimulatedStock("4188.T", "三菱ケミカルG", "Basic Materials",
+                   base_price=900, base_eps=60, annual_dividend=32, benefit_value=_ben("4188.T"),
+                   min_shares=100, op_income_base=200e9, op_growth_annual=6.0,
+                   eps_growth_annual=5.0, price_trend="volatile", fair_pe=14.0),
+    SimulatedStock("4183.T", "三井化学", "Basic Materials",
+                   base_price=3800, base_eps=300, annual_dividend=130, benefit_value=_ben("4183.T"),
+                   min_shares=100, op_income_base=150e9, op_growth_annual=7.0,
+                   eps_growth_annual=6.0, price_trend="crash_recover", fair_pe=12.0),
+    SimulatedStock("3407.T", "旭化成", "Basic Materials",
+                   base_price=1100, base_eps=70, annual_dividend=36, benefit_value=_ben("3407.T"),
+                   min_shares=100, op_income_base=180e9, op_growth_annual=4.0,
+                   eps_growth_annual=3.0, price_trend="volatile", fair_pe=14.0),
+
+    # === 医薬品 ===
+    SimulatedStock("4502.T", "武田薬品", "Healthcare",
+                   base_price=4200, base_eps=230, annual_dividend=188, benefit_value=_ben("4502.T"),
+                   min_shares=100, op_income_base=500e9, op_growth_annual=7.0,
+                   eps_growth_annual=6.0, price_trend="crash_recover", fair_pe=16.0),
+    SimulatedStock("4503.T", "アステラス製薬", "Healthcare",
+                   base_price=1600, base_eps=80, annual_dividend=70, benefit_value=_ben("4503.T"),
+                   min_shares=100, op_income_base=200e9, op_growth_annual=5.0,
+                   eps_growth_annual=4.0, price_trend="crash_recover", fair_pe=18.0),
+
+    # === ゴム ===
+    SimulatedStock("5108.T", "ブリヂストン", "Consumer Cyclical",
+                   base_price=5800, base_eps=400, annual_dividend=200, benefit_value=_ben("5108.T"),
+                   min_shares=100, op_income_base=450e9, op_growth_annual=6.0,
+                   eps_growth_annual=5.0, price_trend="crash_recover", fair_pe=13.0),
+
+    # === ガラス ===
+    SimulatedStock("5201.T", "AGC", "Basic Materials",
+                   base_price=5000, base_eps=350, annual_dividend=210, benefit_value=_ben("5201.T"),
+                   min_shares=100, op_income_base=150e9, op_growth_annual=5.0,
+                   eps_growth_annual=4.0, price_trend="volatile", fair_pe=13.0),
+
+    # === 鉄鋼 ===
+    SimulatedStock("5401.T", "日本製鉄", "Basic Materials",
+                   base_price=3400, base_eps=400, annual_dividend=160, benefit_value=_ben("5401.T"),
+                   min_shares=100, op_income_base=500e9, op_growth_annual=8.0,
+                   eps_growth_annual=6.0, price_trend="volatile", fair_pe=8.0),
+    SimulatedStock("5406.T", "神戸製鋼", "Basic Materials",
+                   base_price=1800, base_eps=200, annual_dividend=70, benefit_value=_ben("5406.T"),
+                   min_shares=100, op_income_base=120e9, op_growth_annual=7.0,
+                   eps_growth_annual=5.0, price_trend="volatile", fair_pe=8.0),
+    SimulatedStock("5411.T", "JFE HD", "Basic Materials",
+                   base_price=2100, base_eps=250, annual_dividend=100, benefit_value=_ben("5411.T"),
+                   min_shares=100, op_income_base=200e9, op_growth_annual=6.0,
+                   eps_growth_annual=4.0, price_trend="volatile", fair_pe=8.0),
+
+    # === 非鉄金属 ===
+    SimulatedStock("5713.T", "住友金属鉱山", "Basic Materials",
+                   base_price=4000, base_eps=250, annual_dividend=100, benefit_value=_ben("5713.T"),
+                   min_shares=100, op_income_base=100e9, op_growth_annual=5.0,
+                   eps_growth_annual=4.0, price_trend="volatile", fair_pe=15.0),
+
+    # === 機械 ===
+    SimulatedStock("6301.T", "コマツ", "Industrials",
+                   base_price=4500, base_eps=300, annual_dividend=144, benefit_value=_ben("6301.T"),
+                   min_shares=100, op_income_base=400e9, op_growth_annual=8.0,
+                   eps_growth_annual=7.0, price_trend="crash_recover", fair_pe=14.0),
+    SimulatedStock("6305.T", "日立建機", "Industrials",
+                   base_price=3800, base_eps=300, annual_dividend=130, benefit_value=_ben("6305.T"),
+                   min_shares=100, op_income_base=100e9, op_growth_annual=9.0,
+                   eps_growth_annual=8.0, price_trend="crash_recover", fair_pe=12.0),
+    SimulatedStock("6471.T", "日本精工", "Industrials",
+                   base_price=800, base_eps=60, annual_dividend=30, benefit_value=_ben("6471.T"),
+                   min_shares=100, op_income_base=60e9, op_growth_annual=6.0,
+                   eps_growth_annual=5.0, price_trend="volatile", fair_pe=13.0),
+    SimulatedStock("6472.T", "NTN", "Industrials",
+                   base_price=300, base_eps=20, annual_dividend=12, benefit_value=_ben("6472.T"),
+                   min_shares=100, op_income_base=30e9, op_growth_annual=8.0,
+                   eps_growth_annual=6.0, price_trend="volatile", fair_pe=14.0),
+    SimulatedStock("6473.T", "ジェイテクト", "Industrials",
+                   base_price=1200, base_eps=100, annual_dividend=46, benefit_value=_ben("6473.T"),
+                   min_shares=100, op_income_base=50e9, op_growth_annual=7.0,
+                   eps_growth_annual=6.0, price_trend="crash_recover", fair_pe=12.0),
+
+    # === 電気機器 ===
+    SimulatedStock("7751.T", "キヤノン", "Technology",
+                   base_price=5000, base_eps=300, annual_dividend=150, benefit_value=_ben("7751.T"),
+                   min_shares=100, op_income_base=300e9, op_growth_annual=6.0,
+                   eps_growth_annual=5.0, price_trend="crash_recover", fair_pe=16.0),
+
+    # === 輸送用機器 ===
+    SimulatedStock("7202.T", "いすゞ自動車", "Consumer Cyclical",
+                   base_price=2000, base_eps=180, annual_dividend=86, benefit_value=_ben("7202.T"),
+                   min_shares=100, op_income_base=250e9, op_growth_annual=7.0,
+                   eps_growth_annual=6.0, price_trend="crash_recover", fair_pe=10.0),
+    SimulatedStock("7261.T", "マツダ", "Consumer Cyclical",
+                   base_price=1200, base_eps=130, annual_dividend=55, benefit_value=_ben("7261.T"),
+                   min_shares=100, op_income_base=120e9, op_growth_annual=6.0,
+                   eps_growth_annual=5.0, price_trend="volatile", fair_pe=8.0),
+    SimulatedStock("7267.T", "本田技研", "Consumer Cyclical",
+                   base_price=1600, base_eps=150, annual_dividend=68, benefit_value=_ben("7267.T"),
+                   min_shares=100, op_income_base=800e9, op_growth_annual=7.0,
+                   eps_growth_annual=6.0, price_trend="crash_recover", fair_pe=10.0),
+    SimulatedStock("7272.T", "ヤマハ発動機", "Consumer Cyclical",
+                   base_price=1400, base_eps=120, annual_dividend=50, benefit_value=_ben("7272.T"),
+                   min_shares=100, op_income_base=150e9, op_growth_annual=8.0,
+                   eps_growth_annual=7.0, price_trend="crash_recover", fair_pe=11.0),
+
+    # === サービス ===
+    SimulatedStock("4324.T", "電通グループ", "Communication Services",
+                   base_price=4000, base_eps=200, annual_dividend=139, benefit_value=_ben("4324.T"),
+                   min_shares=100, op_income_base=100e9, op_growth_annual=5.0,
+                   eps_growth_annual=4.0, price_trend="volatile", fair_pe=18.0),
+
+    # === 卸売（商社） ===
+    SimulatedStock("8001.T", "伊藤忠商事", "Industrials",
+                   base_price=7000, base_eps=500, annual_dividend=200, benefit_value=_ben("8001.T"),
+                   min_shares=100, op_income_base=500e9, op_growth_annual=10.0,
+                   eps_growth_annual=9.0, price_trend="crash_recover", fair_pe=12.0),
+    SimulatedStock("8002.T", "丸紅", "Industrials",
+                   base_price=2500, base_eps=250, annual_dividend=85, benefit_value=_ben("8002.T"),
+                   min_shares=100, op_income_base=300e9, op_growth_annual=10.0,
+                   eps_growth_annual=8.0, price_trend="crash_recover", fair_pe=9.0),
+    SimulatedStock("8015.T", "豊田通商", "Industrials",
+                   base_price=8500, base_eps=600, annual_dividend=280, benefit_value=_ben("8015.T"),
+                   min_shares=100, op_income_base=200e9, op_growth_annual=9.0,
+                   eps_growth_annual=8.0, price_trend="crash_recover", fair_pe=12.0),
+    SimulatedStock("8053.T", "住友商事", "Industrials",
+                   base_price=3500, base_eps=300, annual_dividend=130, benefit_value=_ben("8053.T"),
+                   min_shares=100, op_income_base=350e9, op_growth_annual=9.0,
+                   eps_growth_annual=8.0, price_trend="crash_recover", fair_pe=10.0),
+    SimulatedStock("8058.T", "三菱商事", "Industrials",
+                   base_price=2600, base_eps=270, annual_dividend=100, benefit_value=_ben("8058.T"),
+                   min_shares=100, op_income_base=700e9, op_growth_annual=11.0,
+                   eps_growth_annual=9.0, price_trend="crash_recover", fair_pe=10.0),
+
+    # === 銀行 ===
+    SimulatedStock("8304.T", "あおぞら銀行", "Financial Services",
+                   base_price=2500, base_eps=200, annual_dividend=100, benefit_value=_ben("8304.T"),
+                   min_shares=100, op_income_base=40e9, op_growth_annual=4.0,
+                   eps_growth_annual=3.0, price_trend="volatile", fair_pe=12.0),
+    SimulatedStock("8308.T", "りそなHD", "Financial Services",
+                   base_price=1100, base_eps=80, annual_dividend=25, benefit_value=_ben("8308.T"),
+                   min_shares=100, op_income_base=250e9, op_growth_annual=6.0,
+                   eps_growth_annual=5.0, price_trend="crash_recover", fair_pe=12.0),
+    SimulatedStock("8309.T", "三井住友トラストHD", "Financial Services",
+                   base_price=3500, base_eps=300, annual_dividend=130, benefit_value=_ben("8309.T"),
+                   min_shares=100, op_income_base=150e9, op_growth_annual=7.0,
+                   eps_growth_annual=6.0, price_trend="crash_recover", fair_pe=11.0),
+    SimulatedStock("8316.T", "三井住友FG", "Financial Services",
+                   base_price=8500, base_eps=800, annual_dividend=330, benefit_value=_ben("8316.T"),
+                   min_shares=100, op_income_base=1200e9, op_growth_annual=8.0,
+                   eps_growth_annual=7.0, price_trend="crash_recover", fair_pe=11.0),
+    SimulatedStock("8411.T", "みずほFG", "Financial Services",
+                   base_price=2800, base_eps=250, annual_dividend=105, benefit_value=_ben("8411.T"),
+                   min_shares=100, op_income_base=800e9, op_growth_annual=7.0,
+                   eps_growth_annual=6.0, price_trend="crash_recover", fair_pe=11.0),
+
+    # === 証券 ===
+    SimulatedStock("8473.T", "SBI HD", "Financial Services",
+                   base_price=3700, base_eps=300, annual_dividend=160, benefit_value=_ben("8473.T"),
+                   min_shares=100, op_income_base=200e9, op_growth_annual=10.0,
+                   eps_growth_annual=9.0, price_trend="volatile", fair_pe=12.0),
+    SimulatedStock("8601.T", "大和証券G", "Financial Services",
+                   base_price=1100, base_eps=80, annual_dividend=40, benefit_value=_ben("8601.T"),
+                   min_shares=100, op_income_base=120e9, op_growth_annual=7.0,
+                   eps_growth_annual=6.0, price_trend="volatile", fair_pe=13.0),
+    SimulatedStock("8604.T", "野村HD", "Financial Services",
+                   base_price=900, base_eps=60, annual_dividend=25, benefit_value=_ben("8604.T"),
+                   min_shares=100, op_income_base=150e9, op_growth_annual=8.0,
+                   eps_growth_annual=7.0, price_trend="volatile", fair_pe=14.0),
+
+    # === 保険 ===
+    SimulatedStock("8725.T", "MS&AD", "Financial Services",
+                   base_price=6000, base_eps=500, annual_dividend=250, benefit_value=_ben("8725.T"),
+                   min_shares=100, op_income_base=300e9, op_growth_annual=9.0,
+                   eps_growth_annual=8.0, price_trend="crash_recover", fair_pe=12.0),
+
+    # === 海運 ===
+    SimulatedStock("9101.T", "日本郵船", "Industrials",
+                   base_price=5000, base_eps=700, annual_dividend=260, benefit_value=_ben("9101.T"),
+                   min_shares=100, op_income_base=200e9, op_growth_annual=5.0,
+                   eps_growth_annual=3.0, price_trend="volatile", fair_pe=7.0),
+    SimulatedStock("9107.T", "川崎汽船", "Industrials",
+                   base_price=2200, base_eps=350, annual_dividend=120, benefit_value=_ben("9107.T"),
+                   min_shares=100, op_income_base=100e9, op_growth_annual=5.0,
+                   eps_growth_annual=3.0, price_trend="volatile", fair_pe=6.0),
+
+    # === 通信 ===
+    SimulatedStock("9433.T", "KDDI", "Communication Services",
+                   base_price=4800, base_eps=310, annual_dividend=145, benefit_value=_ben("9433.T"),
+                   min_shares=100, op_income_base=1100e9, op_growth_annual=6.0,
+                   eps_growth_annual=5.0, price_trend="crash_recover", fair_pe=15.0),
+    SimulatedStock("9434.T", "ソフトバンク", "Communication Services",
+                   base_price=1900, base_eps=100, annual_dividend=86, benefit_value=_ben("9434.T"),
+                   min_shares=100, op_income_base=900e9, op_growth_annual=5.0,
+                   eps_growth_annual=4.0, price_trend="flat", fair_pe=18.0),
 ]
 
 
@@ -668,13 +914,16 @@ def main():
     parser.add_argument("--yield-pct", type=float, default=10.0)
     parser.add_argument("--per-pct", type=float, default=25.0)
     parser.add_argument("--min-rules", type=int, default=3)
+    parser.add_argument("--mode", choices=["generic", "1489"], default="1489",
+                        help="銘柄セット: generic=汎用20銘柄, 1489=ETF構成48銘柄")
     args = parser.parse_args()
 
-    stocks = SIMULATED_STOCKS
+    stocks = SIMULATED_1489_STOCKS if args.mode == "1489" else SIMULATED_STOCKS
+    mode_label = "1489 ETF構成銘柄" if args.mode == "1489" else "汎用シミュレーション"
 
     if args.optimize:
         print("\n" + "#" * 65)
-        print("  パラメータ最適化モード")
+        print(f"  パラメータ最適化モード [{mode_label}] ({len(stocks)}銘柄)")
         print("#" * 65)
 
         for holding in [6, 12, 18]:
@@ -696,7 +945,7 @@ def main():
         )
 
         print("\n" + "#" * 65)
-        print("  スクリーニングルール バックテスト")
+        print(f"  スクリーニングルール バックテスト [{mode_label}] ({len(stocks)}銘柄)")
         print("#" * 65)
 
         bt = run_backtest(stocks, rules, holding_months=args.holding)
