@@ -1,0 +1,38 @@
+name: Stock Screener - 1489 ETF Daily Scan
+
+on:
+  schedule:
+    # 日本市場 前場前 8:50 JST = 23:50 UTC (前日)
+    - cron: "50 23 * * 0-4"
+    # 日本市場 後場引け後 15:30 JST = 6:30 UTC
+    - cron: "30 6 * * 1-5"
+
+  # 手動実行
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install yfinance
+
+      - name: Run stock screener
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python scan_and_notify.py
