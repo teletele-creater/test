@@ -1,0 +1,62 @@
+name: Stock Screener - 1489 ETF Scan
+
+on:
+  schedule:
+    # 日次: 後場引け後 15:30 JST = 6:30 UTC（月〜金）
+    # 終値確定後にスキャン。シグナル確定＋ニアミスを通知。
+    - cron: "30 6 * * 1-5"
+
+    # 週次: 毎週土曜 9:00 JST = 0:00 UTC
+    # 全銘柄の俯瞰サマリーを送信。
+    - cron: "0 0 * * 6"
+
+  # 手動実行
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "実行モード"
+        required: false
+        default: "daily"
+        type: choice
+        options:
+          - daily
+          - weekly
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Determine scan mode
+        id: mode
+        run: |
+          # 土曜（cron 6）または手動weeklyなら週次モード
+          DAY_OF_WEEK=$(date -u +%u)
+          MANUAL_MODE="${{ github.event.inputs.mode }}"
+          if [ "$DAY_OF_WEEK" = "6" ] || [ "$MANUAL_MODE" = "weekly" ]; then
+            echo "flag=--weekly" >> "$GITHUB_OUTPUT"
+            echo "label=weekly" >> "$GITHUB_OUTPUT"
+          else
+            echo "flag=" >> "$GITHUB_OUTPUT"
+            echo "label=daily" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: "Run stock screener (${{ steps.mode.outputs.label }})"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python scan_and_notify.py ${{ steps.mode.outputs.flag }}
