@@ -101,8 +101,11 @@ def fetch_stock_data(symbol: str, rules: ScreeningRules) -> StockData:
     trailing_pe = info.get("trailingPE", 0) or 0
     forward_pe = info.get("forwardPE")
 
-    # 過去PER推移
-    hist_pes = _calc_historical_pes(ticker, rules.per_lookback_years)
+    # 過去PER推移（年度別EPSで補正）
+    hist_pes = _calc_historical_pes(ticker, rules.per_lookback_years, eps_values)
+
+    # 株価履歴（底打ち確認用）
+    price_history = _fetch_price_history(ticker, months=12)
 
     return StockData(
         symbol=symbol,
@@ -121,6 +124,7 @@ def fetch_stock_data(symbol: str, rules: ScreeningRules) -> StockData:
         trailing_pe=trailing_pe,
         forward_pe=forward_pe,
         historical_pes=hist_pes,
+        price_history=price_history,
     )
 
 
@@ -196,8 +200,13 @@ def _extract_eps_values(ticker: yf.Ticker) -> dict[str, float]:
     return result
 
 
-def _calc_historical_pes(ticker: yf.Ticker, years: int) -> pd.Series | None:
-    """過去N年のPER推移を月次で計算"""
+def _calc_historical_pes(
+    ticker: yf.Ticker, years: int, eps_values: dict[str, float] | None = None
+) -> pd.Series | None:
+    """
+    過去N年のPER推移を月次で計算。
+    eps_valuesがあれば年度別EPSで補正し、なければ現在EPSでフォールバック。
+    """
     try:
         hist = ticker.history(period=f"{years}y")
         if hist.empty:
@@ -208,13 +217,46 @@ def _calc_historical_pes(ticker: yf.Ticker, years: int) -> pd.Series | None:
         if not trailing_eps or trailing_eps <= 0:
             return None
 
-        # 簡易: 現在のEPSベースで過去株価からPERを逆算
-        # （本来はその時点のEPSを使うべきだが、yfinanceでは取得困難）
         monthly_close = hist["Close"].resample("ME").last()
-        pes = monthly_close / trailing_eps
+
+        if eps_values and len(eps_values) >= 2:
+            # 年度別EPSで各月のPERを計算（その時点の最新EPSを使用）
+            sorted_years = sorted(eps_values.keys())
+            pes_list = []
+            for date, price in monthly_close.items():
+                year_str = str(date.year)
+                # その時点で利用可能な最新年度のEPSを使う
+                applicable_eps = trailing_eps  # フォールバック
+                for y in sorted_years:
+                    if y <= year_str:
+                        applicable_eps = eps_values[y]
+                if applicable_eps > 0:
+                    pes_list.append(price / applicable_eps)
+                else:
+                    pes_list.append(np.nan)
+            pes = pd.Series(pes_list, index=monthly_close.index)
+        else:
+            # フォールバック: 現在EPSで一律計算
+            pes = monthly_close / trailing_eps
+
         return pes.dropna()
     except Exception as e:
         logger.warning(f"Failed to calc historical PEs: {e}")
+        return None
+
+
+def _fetch_price_history(ticker: yf.Ticker, months: int = 12) -> pd.Series | None:
+    """直近N月の月次終値を取得（底打ち確認用）"""
+    try:
+        hist = ticker.history(period=f"{months}mo")
+        if hist.empty:
+            return None
+        monthly = hist["Close"].resample("ME").last().dropna()
+        if len(monthly) < 3:
+            return None
+        return monthly
+    except Exception as e:
+        logger.warning(f"Failed to fetch price history: {e}")
         return None
 
 
