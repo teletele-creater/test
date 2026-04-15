@@ -1,5 +1,4 @@
 import os
-import tweepy
 import anthropic
 from dotenv import load_dotenv
 import time
@@ -7,44 +6,45 @@ import random
 from datetime import datetime, timedelta
 import json
 import logging
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 # ログ設定
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# 環境変数読み込み
 load_dotenv()
 
 
 class TwitterAutomation:
-    def __init__(self):
-        # Anthropic API設定
+    def __init__(self, headless=True):
+        # Anthropic API（ツイート生成用）
         self.anthropic_client = anthropic.Anthropic(
             api_key=os.getenv("ANTHROPIC_API_KEY")
         )
 
-        # Twitter API v2クライアント設定（wait_on_rate_limit=Trueでレート制限を自動待機）
-        self.client = tweepy.Client(
-            bearer_token=os.getenv("TWITTER_BEARER_TOKEN"),
-            consumer_key=os.getenv("TWITTER_API_KEY"),
-            consumer_secret=os.getenv("TWITTER_API_SECRET"),
-            access_token=os.getenv("TWITTER_ACCESS_TOKEN"),
-            access_token_secret=os.getenv("TWITTER_ACCESS_SECRET"),
-            wait_on_rate_limit=True
-        )
+        # Seleniumセットアップ
+        options = webdriver.ChromeOptions()
+        if headless:
+            options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        # botと検知されにくくする設定
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_experimental_option('excludeSwitches', ['enable-automation'])
+        options.add_experimental_option('useAutomationExtension', False)
 
-        # Twitter API v1.1認証（フォロー確認に使用）
-        self.auth = tweepy.OAuth1UserHandler(
-            os.getenv("TWITTER_API_KEY"),
-            os.getenv("TWITTER_API_SECRET"),
-            os.getenv("TWITTER_ACCESS_TOKEN"),
-            os.getenv("TWITTER_ACCESS_SECRET")
+        self.driver = webdriver.Chrome(options=options)
+        self.driver.execute_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )
-        self.api = tweepy.API(self.auth, wait_on_rate_limit=True)
+        self.wait = WebDriverWait(self.driver, 15)
 
-        # 自分のユーザーID取得
-        me = self.client.get_me()
-        self.my_id = me.data.id
+        self.username = os.getenv("TWITTER_USERNAME")
+        self.password = os.getenv("TWITTER_PASSWORD")
 
         # フォローしたユーザーを記録するファイル
         self.followed_users_file = "followed_users.json"
@@ -63,14 +63,56 @@ class TwitterAutomation:
         with open(self.followed_users_file, 'w') as f:
             json.dump(self.followed_users, f)
 
-    def human_like_action(self):
+    def human_like_action(self, min_sec=2, max_sec=6):
         """人間らしい操作間隔を模倣するための待機"""
-        wait_time = random.uniform(3, 8)
+        wait_time = random.uniform(min_sec, max_sec)
         logger.info(f"{wait_time:.1f}秒待機中...")
         time.sleep(wait_time)
 
+    def login(self):
+        """Twitterにログインする"""
+        try:
+            self.driver.get("https://twitter.com/login")
+
+            # ユーザー名入力
+            username_input = self.wait.until(
+                EC.presence_of_element_located((By.NAME, "text"))
+            )
+            username_input.send_keys(self.username)
+
+            # 次へボタン
+            next_button = self.wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//span[text()='次へ']"))
+            )
+            next_button.click()
+            self.human_like_action(1, 3)
+
+            # パスワード入力
+            password_input = self.wait.until(
+                EC.presence_of_element_located((By.NAME, "password"))
+            )
+            password_input.send_keys(self.password)
+
+            # ログインボタン
+            login_button = self.wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//span[text()='ログイン']"))
+            )
+            login_button.click()
+
+            # ホーム画面の読み込み完了を待機
+            self.wait.until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//a[@data-testid='AppTabBar_Home_Link']")
+                )
+            )
+            logger.info("ログイン成功")
+            self.human_like_action(3, 5)
+        except Exception as e:
+            logger.error(f"ログインエラー: {e}")
+            raise
+
     def generate_tweet_content(self, topic):
-        """Anthropic APIを使ってツイート内容を生成"""
+        """Claude APIを使ってツイート内容を生成"""
         try:
             response = self.anthropic_client.messages.create(
                 model="claude-sonnet-4-5",
@@ -95,156 +137,203 @@ class TwitterAutomation:
     def post_tweet(self, content):
         """ツイートを投稿する"""
         try:
-            response = self.client.create_tweet(text=content)
-            logger.info(f"ツイート投稿成功: {content}")
-            return response
+            tweet_box = self.wait.until(
+                EC.element_to_be_clickable(
+                    (By.XPATH, "//div[@data-testid='tweetTextarea_0']")
+                )
+            )
+            tweet_box.click()
+            tweet_box.send_keys(content)
+            self.human_like_action(1, 2)
+
+            post_button = self.wait.until(
+                EC.element_to_be_clickable(
+                    (By.XPATH, "//button[@data-testid='tweetButtonInline']")
+                )
+            )
+            post_button.click()
+            logger.info(f"ツイート投稿成功: {content[:50]}...")
+            self.human_like_action(2, 4)
         except Exception as e:
             logger.error(f"ツイート投稿エラー: {e}")
-            return None
 
-    def is_following(self, target_user_id):
-        """指定ユーザーをフォロー済みか確認（v1.1 API使用）"""
+    def follow_by_hashtag(self, hashtag, count=5):
+        """ハッシュタグ検索結果のユーザーをフォローする"""
         try:
-            # get_friendship は (source_rel, target_rel) のタプルを返す
-            friendship = self.api.get_friendship(
-                source_id=self.my_id,
-                target_id=target_user_id
+            self.driver.get(
+                f"https://twitter.com/search?q=%23{hashtag}&src=typed_query&f=live"
             )
-            return friendship[0].following
-        except Exception as e:
-            logger.error(f"フォロー確認エラー (target={target_user_id}): {e}")
-            return False
+            self.human_like_action(3, 5)
 
-    def auto_follow_by_hashtag(self, hashtag, count=10):
-        """指定したハッシュタグで検索し、指定数のアカウントをフォロー"""
-        # search_recent_tweets の max_results は 10〜100 の範囲
-        count = max(10, min(count, 100))
-        try:
-            tweets = self.client.search_recent_tweets(
-                query=f"#{hashtag} -is:retweet",
-                max_results=count,
-                tweet_fields=['author_id', 'created_at']
+            # スクロールしてツイートを追加読み込み
+            for _ in range(3):
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                self.human_like_action(2, 3)
+
+            # ツイートに含まれるユーザー名を収集
+            user_links = self.driver.find_elements(
+                By.XPATH,
+                "//div[@data-testid='User-Name']//a[contains(@href, '/') and not(contains(@href, '/status/'))]"
             )
-
-            if not tweets.data:
-                logger.info(f"ハッシュタグ #{hashtag} のツイートが見つかりませんでした")
-                return
+            usernames = []
+            for link in user_links:
+                href = link.get_attribute('href')
+                if href:
+                    uname = href.rstrip('/').split('/')[-1]
+                    if uname and uname not in usernames and uname != self.username:
+                        usernames.append(uname)
 
             followed_count = 0
-            for tweet in tweets.data:
-                user_id = tweet.author_id
-
-                # 既にフォローしているか確認
-                if self.is_following(user_id):
-                    logger.info(f"ユーザー {user_id} は既にフォロー済みです")
+            for uname in usernames:
+                if followed_count >= count:
+                    break
+                if uname in self.followed_users:
+                    logger.info(f"@{uname} は既にフォロー済みです")
                     continue
 
                 try:
-                    self.client.follow_user(target_user_id=user_id)
-                    logger.info(f"ユーザー {user_id} をフォローしました")
-                    self.followed_users[str(user_id)] = datetime.now().isoformat()
+                    self.driver.get(f"https://twitter.com/{uname}")
+                    self.human_like_action(2, 4)
+
+                    follow_button = self.wait.until(
+                        EC.element_to_be_clickable(
+                            (By.XPATH,
+                             "//button[@data-testid='placementTracking']//span[text()='フォロー']")
+                        )
+                    )
+                    follow_button.click()
+                    logger.info(f"@{uname} をフォローしました")
+                    self.followed_users[uname] = datetime.now().isoformat()
                     self.save_followed_users()
                     followed_count += 1
-                    self.human_like_action()
+                    self.human_like_action(3, 7)
+                except TimeoutException:
+                    logger.info(f"@{uname} はフォロー済みかボタンが見つかりません")
                 except Exception as e:
-                    logger.error(f"フォローエラー (user_id={user_id}): {e}")
+                    logger.error(f"フォローエラー (@{uname}): {e}")
 
-            logger.info(f"{followed_count}人のユーザーをフォローしました")
+            logger.info(f"{followed_count}人をフォローしました")
         except Exception as e:
             logger.error(f"ハッシュタグ検索エラー: {e}")
 
-    def unfollow_non_followers(self, days=3):
-        """指定日数経過してもフォローバックしていないアカウントをアンフォロー"""
+    def auto_like_by_keyword(self, keyword, count=10):
+        """キーワードで検索してツイートにいいねする"""
         try:
-            cutoff_date = datetime.now() - timedelta(days=days)
-
-            # フォロワーIDをページネーション対応で取得
-            follower_ids = set()
-            for response in tweepy.Paginator(
-                self.client.get_users_followers,
-                id=self.my_id,
-                max_results=1000
-            ):
-                if response.data:
-                    for user in response.data:
-                        follower_ids.add(user.id)
-
-            # フォロー中ユーザーをページネーション対応で取得
-            unfollow_count = 0
-            for response in tweepy.Paginator(
-                self.client.get_users_following,
-                id=self.my_id,
-                max_results=1000
-            ):
-                if not response.data:
-                    continue
-
-                for user in response.data:
-                    user_id_str = str(user.id)
-
-                    if user_id_str not in self.followed_users:
-                        continue
-
-                    follow_date = datetime.fromisoformat(self.followed_users[user_id_str])
-                    if follow_date >= cutoff_date:
-                        continue
-
-                    if user.id in follower_ids:
-                        # フォローバック済みなので記録から削除
-                        del self.followed_users[user_id_str]
-                        self.save_followed_users()
-                        continue
-
-                    try:
-                        self.client.unfollow_user(target_user_id=user.id)
-                        logger.info(f"ユーザー {user_id_str} をアンフォローしました")
-                        unfollow_count += 1
-                        del self.followed_users[user_id_str]
-                        self.save_followed_users()
-                        self.human_like_action()
-                    except Exception as e:
-                        logger.error(f"アンフォローエラー (user_id={user_id_str}): {e}")
-
-            logger.info(f"{unfollow_count}人のユーザーをアンフォローしました")
-        except Exception as e:
-            logger.error(f"アンフォロー処理エラー: {e}")
-
-    def auto_like_by_keyword(self, keyword, count=20):
-        """指定キーワードを含むツイートに自動いいね"""
-        count = max(10, min(count, 100))
-        try:
-            tweets = self.client.search_recent_tweets(
-                query=f"{keyword} -is:retweet",
-                max_results=count,
-                tweet_fields=['id']
+            query = keyword.replace(' ', '%20')
+            self.driver.get(
+                f"https://twitter.com/search?q={query}&src=typed_query&f=live"
             )
-
-            if not tweets.data:
-                logger.info(f"キーワード '{keyword}' のツイートが見つかりませんでした")
-                return
+            self.human_like_action(3, 5)
 
             liked_count = 0
-            for tweet in tweets.data:
-                try:
-                    self.client.like(tweet_id=tweet.id)
-                    logger.info(f"ツイート {tweet.id} にいいねしました")
-                    liked_count += 1
-                    self.human_like_action()
-                except Exception as e:
-                    logger.error(f"いいねエラー (tweet_id={tweet.id}): {e}")
+            scroll_attempts = 0
+
+            while liked_count < count and scroll_attempts < 5:
+                like_buttons = self.driver.find_elements(
+                    By.XPATH, "//button[@data-testid='like']"
+                )
+                for button in like_buttons:
+                    if liked_count >= count:
+                        break
+                    try:
+                        self.driver.execute_script(
+                            "arguments[0].scrollIntoView();", button
+                        )
+                        button.click()
+                        logger.info(f"いいねしました ({liked_count + 1}件目)")
+                        liked_count += 1
+                        self.human_like_action(2, 5)
+                    except Exception as e:
+                        logger.error(f"いいねエラー: {e}")
+
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                self.human_like_action(2, 3)
+                scroll_attempts += 1
 
             logger.info(f"{liked_count}件のツイートにいいねしました")
         except Exception as e:
-            logger.error(f"キーワード検索エラー: {e}")
+            logger.error(f"いいね処理エラー: {e}")
+
+    def unfollow_non_followers(self, days=3):
+        """指定日数経過してもフォローバックしていないユーザーをアンフォロー"""
+        cutoff_date = datetime.now() - timedelta(days=days)
+        targets = [
+            uname for uname, date_str in self.followed_users.items()
+            if datetime.fromisoformat(date_str) < cutoff_date
+        ]
+
+        unfollow_count = 0
+        for uname in targets:
+            try:
+                self.driver.get(f"https://twitter.com/{uname}")
+                self.human_like_action(2, 4)
+
+                # フォローバックされているか確認
+                try:
+                    self.driver.find_element(
+                        By.XPATH, "//span[contains(text(), 'フォローされています')]"
+                    )
+                    logger.info(f"@{uname} にはフォローバックされています。スキップ")
+                    del self.followed_users[uname]
+                    self.save_followed_users()
+                    continue
+                except NoSuchElementException:
+                    pass
+
+                # アンフォローボタンをクリック
+                following_button = self.wait.until(
+                    EC.element_to_be_clickable(
+                        (By.XPATH,
+                         "//button[@data-testid='placementTracking']//span[text()='フォロー中']")
+                    )
+                )
+                following_button.click()
+                self.human_like_action(1, 2)
+
+                # 確認ダイアログ
+                confirm_button = self.wait.until(
+                    EC.element_to_be_clickable(
+                        (By.XPATH, "//button[@data-testid='confirmationSheetConfirm']")
+                    )
+                )
+                confirm_button.click()
+                logger.info(f"@{uname} をアンフォローしました")
+                del self.followed_users[uname]
+                self.save_followed_users()
+                unfollow_count += 1
+                self.human_like_action(3, 7)
+            except TimeoutException:
+                logger.info(f"@{uname} は既にアンフォロー済みの可能性があります")
+                del self.followed_users[uname]
+                self.save_followed_users()
+            except Exception as e:
+                logger.error(f"アンフォローエラー (@{uname}): {e}")
+
+        logger.info(f"{unfollow_count}人をアンフォローしました")
+
+    def close(self):
+        """ブラウザを閉じる"""
+        self.driver.quit()
 
 
 if __name__ == "__main__":
-    bot = TwitterAutomation()
+    bot = TwitterAutomation(headless=True)
 
-    topic = "AIと機械学習の最新トレンド"
-    content = bot.generate_tweet_content(topic)
-    bot.post_tweet(content)
+    try:
+        bot.login()
 
-    bot.auto_follow_by_hashtag("AI", count=10)
-    bot.auto_like_by_keyword("機械学習", count=20)
-    bot.unfollow_non_followers(days=3)
+        # Claude APIでツイート生成＆投稿
+        topic = "AIと機械学習の最新トレンド"
+        content = bot.generate_tweet_content(topic)
+        bot.post_tweet(content)
+
+        # ハッシュタグからフォロー
+        bot.follow_by_hashtag("テック", count=5)
+
+        # キーワードでいいね
+        bot.auto_like_by_keyword("機械学習", count=10)
+
+        # 3日経ってもフォローバックなしをアンフォロー
+        bot.unfollow_non_followers(days=3)
+    finally:
+        bot.close()
