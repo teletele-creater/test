@@ -235,12 +235,12 @@ class TwitterAutomation:
                     self.human_like_action(2, 4)
 
                     follow_button = self.wait.until(
-                        EC.element_to_be_clickable(
+                        EC.presence_of_element_located(
                             (By.XPATH,
                              "//button[@data-testid='placementTracking']//span[text()='フォロー']")
                         )
                     )
-                    follow_button.click()
+                    self._safe_click(follow_button)
                     logger.info(f"@{uname} をフォローしました")
                     self.followed_users[uname] = datetime.now().isoformat()
                     self.save_followed_users()
@@ -267,27 +267,36 @@ class TwitterAutomation:
             liked_count = 0
             scroll_attempts = 0
 
-            while liked_count < count and scroll_attempts < 5:
+            liked_ids = set()
+            while liked_count < count and scroll_attempts < 8:
                 like_buttons = self.driver.find_elements(
                     By.XPATH, "//button[@data-testid='like']"
                 )
+                clicked_this_round = False
                 for button in like_buttons:
                     if liked_count >= count:
                         break
+                    # 同じボタンを何度も押さないように識別子で判定
+                    btn_id = button.get_attribute('aria-label') or ''
+                    btn_key = id(button)
+                    if btn_key in liked_ids:
+                        continue
                     try:
-                        self.driver.execute_script(
-                            "arguments[0].scrollIntoView();", button
-                        )
-                        button.click()
+                        self._safe_click(button)
                         logger.info(f"いいねしました ({liked_count + 1}件目)")
                         liked_count += 1
+                        liked_ids.add(btn_key)
+                        clicked_this_round = True
                         self.human_like_action(2, 5)
                     except Exception as e:
                         logger.error(f"いいねエラー: {e}")
 
-                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                # 新たに押せたボタンが無ければスクロールして読み込み
+                self.driver.execute_script("window.scrollBy(0, 800);")
                 self.human_like_action(2, 3)
                 scroll_attempts += 1
+                if not clicked_this_round and scroll_attempts >= 8:
+                    break
 
             logger.info(f"{liked_count}件のツイートにいいねしました")
         except Exception as e:
@@ -321,21 +330,21 @@ class TwitterAutomation:
 
                 # アンフォローボタンをクリック
                 following_button = self.wait.until(
-                    EC.element_to_be_clickable(
+                    EC.presence_of_element_located(
                         (By.XPATH,
                          "//button[@data-testid='placementTracking']//span[text()='フォロー中']")
                     )
                 )
-                following_button.click()
+                self._safe_click(following_button)
                 self.human_like_action(1, 2)
 
                 # 確認ダイアログ
                 confirm_button = self.wait.until(
-                    EC.element_to_be_clickable(
+                    EC.presence_of_element_located(
                         (By.XPATH, "//button[@data-testid='confirmationSheetConfirm']")
                     )
                 )
-                confirm_button.click()
+                self._safe_click(confirm_button)
                 logger.info(f"@{uname} をアンフォローしました")
                 del self.followed_users[uname]
                 self.save_followed_users()
