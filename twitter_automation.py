@@ -150,24 +150,37 @@ class TwitterAutomation:
             logger.error(f"ツイート生成エラー: {e}")
             return f"今日の{topic}について考えてみました。 #テック #AI"
 
+    def _safe_click(self, element):
+        """通常クリックが効かない場合はJSクリックでフォールバック"""
+        try:
+            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+            time.sleep(0.3)
+            element.click()
+        except Exception:
+            self.driver.execute_script("arguments[0].click();", element)
+
     def post_tweet(self, content):
         """ツイートを投稿する"""
         try:
+            # ホーム画面に確実に移動
+            self.driver.get("https://x.com/home")
+            self.human_like_action(2, 4)
+
             tweet_box = self.wait.until(
                 EC.element_to_be_clickable(
                     (By.XPATH, "//div[@data-testid='tweetTextarea_0']")
                 )
             )
-            tweet_box.click()
+            self._safe_click(tweet_box)
             tweet_box.send_keys(content)
             self.human_like_action(1, 2)
 
             post_button = self.wait.until(
-                EC.element_to_be_clickable(
+                EC.presence_of_element_located(
                     (By.XPATH, "//button[@data-testid='tweetButtonInline']")
                 )
             )
-            post_button.click()
+            self._safe_click(post_button)
             logger.info(f"ツイート投稿成功: {content[:50]}...")
             self.human_like_action(2, 4)
         except Exception as e:
