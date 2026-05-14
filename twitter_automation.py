@@ -20,7 +20,7 @@ load_dotenv()
 
 
 class TwitterAutomation:
-    def __init__(self, headless=True):
+    def __init__(self, headless=False):
         # Anthropic API（ツイート生成用）
         self.anthropic_client = anthropic.Anthropic(
             api_key=os.getenv("ANTHROPIC_API_KEY")
@@ -29,9 +29,15 @@ class TwitterAutomation:
         # Seleniumセットアップ
         options = webdriver.ChromeOptions()
         if headless:
-            options.add_argument('--headless')
+            # 新ヘッドレスモード（検知されにくい）
+            options.add_argument('--headless=new')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--window-size=1280,900')
+        options.add_argument(
+            '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        )
         # botと検知されにくくする設定
         options.add_argument('--disable-blink-features=AutomationControlled')
         options.add_experimental_option('excludeSwitches', ['enable-automation'])
@@ -41,7 +47,7 @@ class TwitterAutomation:
         self.driver.execute_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )
-        self.wait = WebDriverWait(self.driver, 15)
+        self.wait = WebDriverWait(self.driver, 30)
 
         self.username = os.getenv("TWITTER_USERNAME")
         self.password = os.getenv("TWITTER_PASSWORD")
@@ -69,35 +75,54 @@ class TwitterAutomation:
         logger.info(f"{wait_time:.1f}秒待機中...")
         time.sleep(wait_time)
 
+    def _click_button_by_text(self, texts):
+        """ボタンテキスト（日本語/英語）でクリックする"""
+        if isinstance(texts, str):
+            texts = [texts]
+        xpath = " | ".join([f"//button[.//span[text()='{t}']]" for t in texts])
+        button = self.wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
+        button.click()
+
     def login(self):
-        """Twitterにログインする"""
+        """X (Twitter) にログインする"""
         try:
-            self.driver.get("https://twitter.com/login")
+            self.driver.get("https://x.com/i/flow/login")
+            self.human_like_action(3, 5)
 
-            # ユーザー名入力
+            # ユーザー名入力（言語問わずname="text"のinputが対象）
             username_input = self.wait.until(
-                EC.presence_of_element_located((By.NAME, "text"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='text']"))
             )
+            username_input.click()
             username_input.send_keys(self.username)
+            self.human_like_action(1, 2)
 
-            # 次へボタン
-            next_button = self.wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//span[text()='次へ']"))
-            )
-            next_button.click()
-            self.human_like_action(1, 3)
+            # 「次へ」ボタン（日本語/英語両対応）
+            self._click_button_by_text(['次へ', 'Next'])
+            self.human_like_action(2, 4)
+
+            # 「不審なログイン」確認画面でユーザー名再入力を求められた場合に対応
+            try:
+                challenge = self.driver.find_element(
+                    By.CSS_SELECTOR, "input[data-testid='ocfEnterTextTextInput']"
+                )
+                challenge.click()
+                challenge.send_keys(self.username)
+                self._click_button_by_text(['次へ', 'Next'])
+                self.human_like_action(2, 4)
+            except NoSuchElementException:
+                pass
 
             # パスワード入力
             password_input = self.wait.until(
-                EC.presence_of_element_located((By.NAME, "password"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='password']"))
             )
+            password_input.click()
             password_input.send_keys(self.password)
+            self.human_like_action(1, 2)
 
-            # ログインボタン
-            login_button = self.wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//span[text()='ログイン']"))
-            )
-            login_button.click()
+            # 「ログイン」ボタン（日本語/英語両対応）
+            self._click_button_by_text(['ログイン', 'Log in'])
 
             # ホーム画面の読み込み完了を待機
             self.wait.until(
@@ -109,6 +134,12 @@ class TwitterAutomation:
             self.human_like_action(3, 5)
         except Exception as e:
             logger.error(f"ログインエラー: {e}")
+            # デバッグ用にスクリーンショットを保存
+            try:
+                self.driver.save_screenshot("login_error.png")
+                logger.info("login_error.png にスクリーンショットを保存しました")
+            except Exception:
+                pass
             raise
 
     def generate_tweet_content(self, topic):
@@ -161,7 +192,7 @@ class TwitterAutomation:
         """ハッシュタグ検索結果のユーザーをフォローする"""
         try:
             self.driver.get(
-                f"https://twitter.com/search?q=%23{hashtag}&src=typed_query&f=live"
+                f"https://x.com/search?q=%23{hashtag}&src=typed_query&f=live"
             )
             self.human_like_action(3, 5)
 
@@ -192,7 +223,7 @@ class TwitterAutomation:
                     continue
 
                 try:
-                    self.driver.get(f"https://twitter.com/{uname}")
+                    self.driver.get(f"https://x.com/{uname}")
                     self.human_like_action(2, 4)
 
                     follow_button = self.wait.until(
@@ -221,7 +252,7 @@ class TwitterAutomation:
         try:
             query = keyword.replace(' ', '%20')
             self.driver.get(
-                f"https://twitter.com/search?q={query}&src=typed_query&f=live"
+                f"https://x.com/search?q={query}&src=typed_query&f=live"
             )
             self.human_like_action(3, 5)
 
@@ -265,7 +296,7 @@ class TwitterAutomation:
         unfollow_count = 0
         for uname in targets:
             try:
-                self.driver.get(f"https://twitter.com/{uname}")
+                self.driver.get(f"https://x.com/{uname}")
                 self.human_like_action(2, 4)
 
                 # フォローバックされているか確認
