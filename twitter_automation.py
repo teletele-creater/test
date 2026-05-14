@@ -385,7 +385,7 @@ KEYWORDS = [
 
 
 if __name__ == "__main__":
-    bot = TwitterAutomation(headless=True)
+    bot = TwitterAutomation(headless=False)
 
     try:
         bot.login()
