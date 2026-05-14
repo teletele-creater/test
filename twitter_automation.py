@@ -87,78 +87,59 @@ class TwitterAutomation:
         button = self.wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
         button.click()
 
-    def login(self):
-        """X (Twitter) にログインする（セッション保存済みならスキップ）"""
+    def _is_logged_in(self):
+        """現在ログイン済みかチェック"""
         try:
-            self.driver.get("https://x.com/home")
-            self.human_like_action(3, 5)
-
-            # すでにログイン済みか確認
-            try:
-                self.driver.find_element(
-                    By.XPATH, "//a[@data-testid='AppTabBar_Home_Link']"
-                )
-                logger.info("セッション有効：ログインをスキップしました")
-                return
-            except NoSuchElementException:
-                pass
-
-            # ログインページへ
-            self.driver.get("https://x.com/i/flow/login")
-            self.human_like_action(3, 5)
-
-            # ユーザー名入力（言語問わずname="text"のinputが対象）
-            username_input = self.wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='text']"))
+            self.driver.find_element(
+                By.XPATH, "//a[@data-testid='AppTabBar_Home_Link']"
             )
-            username_input.click()
-            username_input.send_keys(self.username)
-            self.human_like_action(1, 2)
+            return True
+        except NoSuchElementException:
+            return False
 
-            # 「次へ」ボタン（日本語/英語両対応）
-            self._click_button_by_text(['次へ', 'Next'])
-            self.human_like_action(2, 4)
+    def login(self, wait_minutes=5):
+        """X (Twitter) にログインする
+        - セッション保存済みなら自動スキップ
+        - 未ログインならブラウザを開いて手動ログインを待機
+        """
+        self.driver.get("https://x.com/home")
+        self.human_like_action(3, 5)
 
-            # 「不審なログイン」確認画面でユーザー名再入力を求められた場合に対応
-            try:
-                challenge = self.driver.find_element(
-                    By.CSS_SELECTOR, "input[data-testid='ocfEnterTextTextInput']"
-                )
-                challenge.click()
-                challenge.send_keys(self.username)
-                self._click_button_by_text(['次へ', 'Next'])
+        if self._is_logged_in():
+            logger.info("セッション有効：ログインをスキップしました")
+            return
+
+        # 手動ログインを促すメッセージを大きく表示
+        print("\n" + "=" * 70)
+        print("  Chromeブラウザが開きました。Xに手動でログインしてください")
+        print(f"  ログイン完了を自動検知して処理を続行します（最大{wait_minutes}分待機）")
+        print("  ※一度ログインすればchrome_profileに保存され次回からは自動スキップ")
+        print("=" * 70 + "\n")
+
+        self.driver.get("https://x.com/i/flow/login")
+
+        # ホーム画面のリンクが表示されるまで定期的にチェック（最大wait_minutes分）
+        check_interval = 3
+        max_checks = (wait_minutes * 60) // check_interval
+        for i in range(max_checks):
+            time.sleep(check_interval)
+            if self._is_logged_in():
+                logger.info("ログイン完了を検知しました")
                 self.human_like_action(2, 4)
-            except NoSuchElementException:
-                pass
+                return
+            if i % 10 == 0 and i > 0:
+                remaining = wait_minutes - (i * check_interval) // 60
+                logger.info(f"ログイン待機中...（残り約{remaining}分）")
 
-            # パスワード入力
-            password_input = self.wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='password']"))
-            )
-            password_input.click()
-            password_input.send_keys(self.password)
-            self.human_like_action(1, 2)
-
-            # 「ログイン」ボタン（日本語/英語両対応）
-            self._click_button_by_text(['ログイン', 'Log in'])
-
-            # ホーム画面の読み込み完了を待機
-            self.wait.until(
-                EC.presence_of_element_located(
-                    (By.XPATH, "//a[@data-testid='AppTabBar_Home_Link']")
-                )
-            )
-            logger.info("ログイン成功")
-            self.human_like_action(3, 5)
-        except Exception as e:
-            logger.error(f"ログインエラー: {e}")
-            # デバッグ用にスクリーンショットを保存
-            try:
-                self.driver.save_screenshot("login_error.png")
-                logger.info("login_error.png にスクリーンショットを保存しました")
-            except Exception:
-                pass
-            raise
+        # タイムアウト
+        try:
+            self.driver.save_screenshot("login_timeout.png")
+        except Exception:
+            pass
+        raise TimeoutException(
+            f"{wait_minutes}分以内にログインが完了しませんでした。"
+            "再実行してログインしてください。"
+        )
 
     def generate_tweet_content(self, topic):
         """Claude APIを使ってツイート内容を生成"""
