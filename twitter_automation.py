@@ -26,8 +26,12 @@ class TwitterAutomation:
             api_key=os.getenv("ANTHROPIC_API_KEY")
         )
 
+        # ログイン状態を保持するプロファイルディレクトリ（スクリプトと同じ場所に保存）
+        profile_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chrome_profile")
+
         # Seleniumセットアップ
         options = webdriver.ChromeOptions()
+        options.add_argument(f'--user-data-dir={profile_dir}')
         if headless:
             # 新ヘッドレスモード（検知されにくい）
             options.add_argument('--headless=new')
@@ -84,8 +88,22 @@ class TwitterAutomation:
         button.click()
 
     def login(self):
-        """X (Twitter) にログインする"""
+        """X (Twitter) にログインする（セッション保存済みならスキップ）"""
         try:
+            self.driver.get("https://x.com/home")
+            self.human_like_action(3, 5)
+
+            # すでにログイン済みか確認
+            try:
+                self.driver.find_element(
+                    By.XPATH, "//a[@data-testid='AppTabBar_Home_Link']"
+                )
+                logger.info("セッション有効：ログインをスキップしました")
+                return
+            except NoSuchElementException:
+                pass
+
+            # ログインページへ
             self.driver.get("https://x.com/i/flow/login")
             self.human_like_action(3, 5)
 
