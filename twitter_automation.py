@@ -6,7 +6,7 @@ import random
 from datetime import datetime, timedelta
 import json
 import logging
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -29,33 +29,14 @@ class TwitterAutomation:
         # ログイン状態を保持するプロファイルディレクトリ（スクリプトと同じ場所に保存）
         profile_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chrome_profile")
 
-        # Seleniumセットアップ
-        options = webdriver.ChromeOptions()
+        # undetected-chromedriverセットアップ（bot検知回避）
+        options = uc.ChromeOptions()
         options.add_argument(f'--user-data-dir={profile_dir}')
-        if headless:
-            # 新ヘッドレスモード（検知されにくい）
-            options.add_argument('--headless=new')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--disable-extensions')
-        options.add_argument('--remote-debugging-port=9222')
-        options.add_argument('--no-first-run')
-        options.add_argument('--no-default-browser-check')
         options.add_argument('--window-size=1280,900')
-        options.add_argument(
-            '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-            'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-        )
-        # botと検知されにくくする設定
-        options.add_argument('--disable-blink-features=AutomationControlled')
-        options.add_experimental_option('excludeSwitches', ['enable-automation'])
-        options.add_experimental_option('useAutomationExtension', False)
 
-        self.driver = webdriver.Chrome(options=options)
-        self.driver.execute_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-        )
+        self.driver = uc.Chrome(options=options, headless=headless, use_subprocess=True)
         self.wait = WebDriverWait(self.driver, 30)
 
         self.username = os.getenv("TWITTER_USERNAME")
