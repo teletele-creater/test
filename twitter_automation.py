@@ -159,6 +159,17 @@ class TwitterAutomation:
         except Exception:
             self.driver.execute_script("arguments[0].click();", element)
 
+    def _type_text(self, element, text):
+        """絵文字などBMP外の文字も含めて入力する（CDP経由）"""
+        self._safe_click(element)
+        time.sleep(0.3)
+        try:
+            self.driver.execute_cdp_cmd("Input.insertText", {"text": text})
+        except Exception:
+            # CDPが使えない場合はBMP外文字を除外してsend_keysにフォールバック
+            safe_text = ''.join(c for c in text if ord(c) < 0x10000)
+            element.send_keys(safe_text)
+
     def post_tweet(self, content):
         """ツイートを投稿する"""
         try:
@@ -171,8 +182,7 @@ class TwitterAutomation:
                     (By.XPATH, "//div[@data-testid='tweetTextarea_0']")
                 )
             )
-            self._safe_click(tweet_box)
-            tweet_box.send_keys(content)
+            self._type_text(tweet_box, content)
             self.human_like_action(1, 2)
 
             post_button = self.wait.until(
