@@ -18,6 +18,17 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
+HASHTAGS = [
+    '#浮気',
+    '#不倫',
+    '#信頼関係',
+    '#恋愛相談',
+    '#パートナー',
+    '#浮気疑惑',
+    '#既婚者',
+    '#恋愛',
+]
+
 
 class TwitterAutomation:
     def __init__(self, headless=False):
@@ -112,6 +123,7 @@ class TwitterAutomation:
         raise TimeoutException(f"{wait_minutes}分以内にログインが完了しませんでした。")
 
     def generate_tweet_content(self, topic):
+        hashtag = random.choice(HASHTAGS)
         try:
             response = self.anthropic_client.messages.create(
                 model="claude-sonnet-4-5",
@@ -119,30 +131,36 @@ class TwitterAutomation:
                 system=(
                     "あなたは恋愛・パートナーシップの悩みに寄り添うアドバイザーです。"
                     "浮気の不安や疑惑を抱える人の気持ちに共感しながら、"
-                    "寄り添いかつ前向きなトーンでツイートを作成してください。"
-                    "「必ず130文字以内」に収めること（ハッシュタグ含めて）。業者・広告っぽくならないこと。"
+                    "寄り添いかつ前向きなトーンでつぶやきを作成してください。"
+                    "普通の人が書いたような自然な文体にすること。AI感を出さないこと。"
                 ),
                 messages=[{
                     "role": "user",
                     "content": (
                         f"次のトピックに関するつぶやきを生成: {topic}\n\n"
                         "ルール:\n"
-                        "- 【必須】130文字以内（ハッシュタグ含めて、超過絶対不可）\n"
+                        f"- ハッシュタグは末尾に「{hashtag}」だけを1つ付ける（それ以外のハッシュタグは絶対に追加しない）\n"
+                        f"- ハッシュタグ込みで130文字以内に収めること（超過絶対不可）\n"
                         "- ターゲット層：パートナーへの不安・浮気の悩みを持つ人\n"
-                        "- トーン：共感的、親しみやすい、前向き\n"
-                        "- 関連するハッシュタグを1～2個含める\n"
-                        "- 業者・広告のような文体は避ける"
+                        "- トーン：共感的、親しみやすい、普通の人のつぶやき風\n"
+                        "- 業者・広告・AIっぽい文体は絶対に避ける"
                     )
                 }]
             )
             content = response.content[0].text.strip()
+            # ハッシュタグが複数入っていたら指定の1つだけ残す
+            import re
+            content = re.sub(r'#\S+', '', content).strip()
+            content = f"{content} {hashtag}"
             if len(content) > 140:
-                content = content[:137] + '...'
-            logger.info(f"生成ツイート({len(content)}文字): {content[:50]}...")
+                # ハッシュタグを保持しつつ本文を切り詰める
+                max_body = 140 - len(hashtag) - 4
+                content = content[:max_body].rstrip() + f"... {hashtag}"
+            logger.info(f"生成ツイート({len(content)}文字): {content}")
             return content
         except Exception as e:
             logger.error(f"ツイート生成エラー: {e}")
-            return f"今日の{topic[:20]}について考える。 #恋愛相談"
+            return f"パートナーへの不安、一人で抱え込まないで。 {hashtag}"
 
     def _safe_click(self, element):
         try:
