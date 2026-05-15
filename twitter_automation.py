@@ -97,7 +97,7 @@ class TwitterAutomation:
             self.driver.save_screenshot("login_timeout.png")
         except Exception:
             pass
-        raise TimeoutException(f"{wait_minutes}分以内にログインが完了しませんでした。再実行してログインしてください。")
+        raise TimeoutException(f"{wait_minutes}分以内にログインが完了しまた。再実行してログインしてください。")
 
     def generate_tweet_content(self, topic):
         """240文字以内でツイートを生成し、超過時は切り捨てる"""
@@ -125,7 +125,6 @@ class TwitterAutomation:
                 }]
             )
             content = response.content[0].text.strip()
-            # 280文字超過の安全剰り捨て
             if len(content) > 280:
                 content = content[:276] + '...'
             logger.info(f"生成ツイート({len(content)}文字): {content[:50]}...")
@@ -212,11 +211,9 @@ class TwitterAutomation:
         """profileページのツイート記事内のいいねボタンを正確に指定してフォロー前にいいね"""
         liked = 0
         try:
-            # ツイートタイムラインが読み込まれるまで待機
             self.wait.until(
                 EC.presence_of_element_located((By.XPATH, "//article[@data-testid='tweet']"))
             )
-            # article内のいいねボタンに絞り込む（業者系リツイートを除外するため）
             like_buttons = self.driver.find_elements(
                 By.XPATH, "//article[@data-testid='tweet']//button[@data-testid='like']"
             )
@@ -260,7 +257,6 @@ class TwitterAutomation:
         - 10人ごとの休憩: 300-360秒
         """
         followed_count = 0
-        # 避けるキーワードが尽きたら次のキーワードに移る
         keywords_to_try = [keyword] + random.sample(
             [k for k in KEYWORDS if k != keyword],
             min(len(KEYWORDS) - 1, 8)
@@ -276,15 +272,14 @@ class TwitterAutomation:
                 )
                 self.human_like_action(3, 5)
 
-                # スクロールしてツイートを追加読み込み
                 for _ in range(5):
                     self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                     self.human_like_action(2, 3)
 
-                # 検索結果のツイート記事の投稿者のみを取得（article内に絞り込む）
+                # article内に絞り込んでツイート投稿者のみ取得
                 user_links = self.driver.find_elements(
                     By.XPATH,
-                    "//article[@data-testid='tweet']//div[@data-testid='User-Name"]//a[contains(@href, '/') and not(contains(@href, '/status/'))]"
+                    "//article[@data-testid='tweet']//div[@data-testid='User-Name']//a[contains(@href, '/') and not(contains(@href, '/status/'))]"
                 )
                 usernames = []
                 for link in user_links:
@@ -307,16 +302,13 @@ class TwitterAutomation:
                         self.driver.get(f"https://x.com/{uname}")
                         self.human_like_action(2, 4)
 
-                        # 品質フィルター
                         stats = self._get_user_stats()
                         if not self._is_quality_account(stats, uname):
                             continue
 
-                        # フォロー前にいいね（2件）
                         self._like_recent_tweets(uname, count=2)
                         self.human_like_action(1, 3)
 
-                        # フォロー
                         follow_button = self.wait.until(
                             EC.presence_of_element_located(
                                 (By.XPATH,
@@ -332,7 +324,6 @@ class TwitterAutomation:
                         self.followed_users[uname] = datetime.now().isoformat()
                         self.save_followed_users()
 
-                        # 10人ごとに5分の長休憩、それ以外は3分待機
                         if followed_count % 10 == 0:
                             logger.info(f"{followed_count}人完了。長休憩中（5分前後）...")
                             self.human_like_action(300, 360)
@@ -472,7 +463,6 @@ TOPICS = [
     '信頼関係を再構築した夫婦が実践した具体的なコミュニケーション',
 ]
 
-# 浮気を疑っている・不安を持つ個人が実際につぶやくワードの組み合わせ
 KEYWORDS = [
     '彼氏 最近 冷たい',
     '旦那 帰り 遅い 怪しい',
@@ -499,7 +489,6 @@ if __name__ == "__main__":
         content = bot.generate_tweet_content(topic)
         bot.post_tweet(content)
 
-        # キーワード組み合わせ検索で500時間かけて８０人フォロー
         keyword = random.choice(KEYWORDS)
         bot.follow_by_keyword_search(keyword, count=80)
 
