@@ -107,7 +107,7 @@ class TwitterAutomation:
                 max_tokens=200,
                 system=(
                     "あなたは恋愛・パートナーシップの悩みに寄り添うアドバイザーです。"
-                    "浮気の不安や疑惑を抄える人の気持ちに共感しながら、"
+                    "浮気の不安や疑惑を抱える人の気持ちに共感しながら、"
                     "寄り添いかつ前向きなトーンでツイートを作成してください。"
                     "「必ず130文字以内」に収めること（ハッシュタグ含めて）。業者・広告っぽくならないこと。"
                 ),
@@ -125,7 +125,6 @@ class TwitterAutomation:
                 }]
             )
             content = response.content[0].text.strip()
-            # 日本語140文字超過の安全切り捨て
             if len(content) > 140:
                 content = content[:137] + '...'
             logger.info(f"生成ツイート({len(content)}文字): {content[:50]}...")
@@ -167,12 +166,7 @@ class TwitterAutomation:
             return 0
 
     def _get_user_stats(self):
-        """プロフィールページからフォロワー/フォロー数を取得。
-        Xの新仕様で/verified_followersなどURLは多様なため、テキストベースで探す。
-        """
         stats = {'followers': 0, 'following': 0, 'has_bio': False}
-
-        # ステット関連のリンクをすべて取得し、テキストを見て判定
         try:
             stat_links = self.driver.find_elements(
                 By.XPATH,
@@ -180,13 +174,11 @@ class TwitterAutomation:
             )
             for link in stat_links:
                 href = link.get_attribute('href') or ''
-                # /followers_you_followは除外
                 if '/followers_you_follow' in href:
                     continue
                 text = link.text or ''
                 if not text:
                     continue
-                # テキスト例: "123\nフォロワー" または "1.2万 フォロワー"
                 num_text = text.replace('\n', ' ').split()[0] if text.strip() else ''
                 if 'フォロワー' in text or 'Followers' in text:
                     stats['followers'] = self._parse_count(num_text)
@@ -205,24 +197,25 @@ class TwitterAutomation:
     def _is_quality_account(self, stats, uname):
         followers = stats['followers']
         following = stats['following']
-        if followers < 20:
+        if followers < 10:
             logger.info(f"@{uname} スキップ: フォロワー数が少なすぎます ({followers}人)")
             return False
-        if following > 5000:
+        if following > 8000:
             logger.info(f"@{uname} スキップ: フォロー数が多すぎます ({following}人)")
             return False
-        if following / max(followers, 1) > 10:
+        if followers > 0 and following / followers > 15:
             logger.info(f"@{uname} スキップ: フォロー/フォロワー比が異常 ({following}/{followers})")
             return False
         if not stats['has_bio']:
-            logger.info(f"@{uname} スキップ: bioなし")
-            return False
+            logger.info(f"@{uname} bioなし（フォロー続行）")
         return True
 
     def _like_recent_tweets(self, uname, count=2):
         liked = 0
+        # 短いタイムアウト（8秒）でいいねを試み、失敗してもフォローは続行
+        short_wait = WebDriverWait(self.driver, 8)
         try:
-            self.wait.until(
+            short_wait.until(
                 EC.presence_of_element_located((By.XPATH, "//article[@data-testid='tweet']"))
             )
             like_buttons = self.driver.find_elements(
@@ -230,16 +223,37 @@ class TwitterAutomation:
             )
             for btn in like_buttons[:count]:
                 try:
+                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", btn)
+                    time.sleep(0.5)
                     self._safe_click(btn)
                     liked += 1
                     self.human_like_action(1, 2)
                 except Exception:
                     pass
         except Exception as e:
-            logger.warning(f"@{uname} のいいねスキップ: {e}")
+            logger.info(f"@{uname} のいいねスキップ（ツイート未検出）")
         if liked > 0:
             logger.info(f"@{uname} のツイートに{liked}件いいねしました（フォロー前）")
         return liked
+
+    def _click_follow_button(self):
+        # 複数のXPathパターンでフォローボタンを探す
+        xpaths = [
+            "//button[@data-testid='follow']",
+            "//button[@data-testid='placementTracking']//span[text()='フォロー']",
+            "//button[.//span[normalize-space(text())='フォロー']]",
+            "//div[@data-testid='placementTracking']//span[text()='フォロー']",
+        ]
+        for xpath in xpaths:
+            try:
+                btn = WebDriverWait(self.driver, 8).until(
+                    EC.element_to_be_clickable((By.XPATH, xpath))
+                )
+                self._safe_click(btn)
+                return True
+            except Exception:
+                continue
+        return False
 
     def post_tweet(self, content):
         try:
@@ -313,26 +327,22 @@ class TwitterAutomation:
                         self._like_recent_tweets(uname, count=2)
                         self.human_like_action(1, 3)
 
-                        follow_button = self.wait.until(
-                            EC.presence_of_element_located(
-                                (By.XPATH,
-                                 "//button[@data-testid='placementTracking']//span[text()='フォロー']")
+                        if self._click_follow_button():
+                            followed_count += 1
+                            logger.info(
+                                f"@{uname} をフォロー ({followed_count}/{count}) "
+                                f"(フォロワー:{stats['followers']} フォロー:{stats['following']})"
                             )
-                        )
-                        self._safe_click(follow_button)
-                        followed_count += 1
-                        logger.info(
-                            f"@{uname} をフォロー ({followed_count}/{count}) "
-                            f"(フォロワー:{stats['followers']} フォロー:{stats['following']})"
-                        )
-                        self.followed_users[uname] = datetime.now().isoformat()
-                        self.save_followed_users()
+                            self.followed_users[uname] = datetime.now().isoformat()
+                            self.save_followed_users()
 
-                        if followed_count % 10 == 0:
-                            logger.info(f"{followed_count}人完了。長休憩中（5分前後）...")
-                            self.human_like_action(300, 360)
+                            if followed_count % 10 == 0:
+                                logger.info(f"{followed_count}人完了。長休憩中（5分前後）...")
+                                self.human_like_action(300, 360)
+                            else:
+                                self.human_like_action(180, 220)
                         else:
-                            self.human_like_action(180, 220)
+                            logger.info(f"@{uname} フォローボタンが見つかりません（フォロー済みの可能性）")
 
                     except TimeoutException:
                         logger.info(f"@{uname} はフォロー済みかボタンが見つかりません")
