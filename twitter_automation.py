@@ -6,13 +6,13 @@ import random
 from datetime import datetime, timedelta
 import json
 import logging
+import threading
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-# ログ設定
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,6 @@ load_dotenv()
 
 class TwitterAutomation:
     def __init__(self, headless=False):
-        # Anthropic API（ツイート生成用）
         self.anthropic_client = anthropic.Anthropic(
             api_key=os.getenv("ANTHROPIC_API_KEY")
         )
@@ -106,18 +105,27 @@ class TwitterAutomation:
         )
 
     def generate_tweet_content(self, topic):
-        """Claude APIを使ってツイート内容を生成"""
         try:
             response = self.anthropic_client.messages.create(
                 model="claude-sonnet-4-5",
                 max_tokens=280,
-                system="あなたはソーシャルメディアマネージャーです。専門的かつ親しみやすいトーンで280文字以内のツイートを作成してください。",
+                system=(
+                    "あなたは恋愛・パートナーシップの悩みに寄り添うアドバイザーです。"
+                    "浮気の不安や疑惑を抄える人の気持ちに共感しながら、"
+                    "寄り添いかつ前向きなトーンで280文字以内のツイートを作成してください。"
+                    "業者・広告っぽくならないこと。"
+                ),
                 messages=[
                     {
                         "role": "user",
                         "content": (
                             f"次のトピックに関するハッシュタグを含むつぶやきを生成してください: {topic}\n\n"
-                            "ルール:\n- 280文字以内\n- トーン：寄り添いながらも専門的\n- ハッシュタグを含める"
+                            "ルール:\n"
+                            "- 280文字以内\n"
+                            "- ターゲット層：パートナーへの不安・浮気の悩みを抗える人\n"
+                            "- トーン：共感的、親しみやすい、前向き\n"
+                            "- 関連するハッシュタグを含める\n"
+                            "- 業者・広告のような文体は避ける"
                         )
                     }
                 ]
@@ -125,7 +133,7 @@ class TwitterAutomation:
             return response.content[0].text
         except Exception as e:
             logger.error(f"ツイート生成エラー: {e}")
-            return f"今日の{topic}について考えてみました。 #浮気相談 #恋愛相談"
+            return f"今日の{topic}について考えてみました。 #恋愛相談 #恋愛不安"
 
     def _safe_click(self, element):
         try:
@@ -245,68 +253,88 @@ class TwitterAutomation:
         except Exception as e:
             logger.error(f"ツイート投稿エラー: {e}")
 
-    def follow_by_hashtag(self, hashtag, count=5):
-        try:
-            self.driver.get(
-                f"https://x.com/search?q=%23{hashtag}&src=typed_query&f=live"
-            )
-            self.human_like_action(3, 5)
+    def follow_by_hashtag(self, hashtag, count=80):
+        """80人を目標に、複数ハッシュタグを循環しながらスローリーにフォロー"""
+        followed_count = 0
+        hashtags_to_try = [hashtag] + random.sample(
+            [h for h in HASHTAGS if h != hashtag],
+            min(len(HASHTAGS) - 1, 5)
+        )
 
-            for _ in range(3):
-                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                self.human_like_action(2, 3)
+        for current_hashtag in hashtags_to_try:
+            if followed_count >= count:
+                break
+            try:
+                self.driver.get(
+                    f"https://x.com/search?q=%23{current_hashtag}&src=typed_query&f=live"
+                )
+                self.human_like_action(3, 5)
 
-            user_links = self.driver.find_elements(
-                By.XPATH,
-                "//div[@data-testid='User-Name']//a[contains(@href, '/') and not(contains(@href, '/status/'))]"
-            )
-            usernames = []
-            for link in user_links:
-                href = link.get_attribute('href')
-                if href:
-                    uname = href.rstrip('/').split('/')[-1]
-                    if uname and uname not in usernames and uname != self.username:
-                        usernames.append(uname)
+                for _ in range(5):
+                    self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    self.human_like_action(2, 3)
 
-            followed_count = 0
-            for uname in usernames:
-                if followed_count >= count:
-                    break
-                if uname in self.followed_users:
-                    logger.info(f"@{uname} は既にフォロー済みです")
-                    continue
+                user_links = self.driver.find_elements(
+                    By.XPATH,
+                    "//div[@data-testid='User-Name']//a[contains(@href, '/') and not(contains(@href, '/status/'))]"
+                )
+                usernames = []
+                for link in user_links:
+                    href = link.get_attribute('href')
+                    if href:
+                        uname = href.rstrip('/').split('/')[-1]
+                        if uname and uname not in usernames and uname != self.username:
+                            usernames.append(uname)
 
-                try:
-                    self.driver.get(f"https://x.com/{uname}")
-                    self.human_like_action(2, 4)
-
-                    stats = self._get_user_stats()
-                    if not self._is_quality_account(stats, uname):
+                for uname in usernames:
+                    if followed_count >= count:
+                        break
+                    if uname in self.followed_users:
+                        logger.info(f"@{uname} は既にフォロー済みです")
                         continue
 
-                    self._like_recent_tweets(uname, count=2)
-                    self.human_like_action(1, 3)
+                    try:
+                        self.driver.get(f"https://x.com/{uname}")
+                        self.human_like_action(2, 4)
 
-                    follow_button = self.wait.until(
-                        EC.presence_of_element_located(
-                            (By.XPATH,
-                             "//button[@data-testid='placementTracking']//span[text()='フォロー']")
+                        stats = self._get_user_stats()
+                        if not self._is_quality_account(stats, uname):
+                            continue
+
+                        self._like_recent_tweets(uname, count=2)
+                        self.human_like_action(1, 3)
+
+                        follow_button = self.wait.until(
+                            EC.presence_of_element_located(
+                                (By.XPATH,
+                                 "//button[@data-testid='placementTracking']//span[text()='フォロー']")
+                            )
                         )
-                    )
-                    self._safe_click(follow_button)
-                    logger.info(f"@{uname} をフォローしました (フォロワー:{stats['followers']} フォロー:{stats['following']})")
-                    self.followed_users[uname] = datetime.now().isoformat()
-                    self.save_followed_users()
-                    followed_count += 1
-                    self.human_like_action(4, 8)
-                except TimeoutException:
-                    logger.info(f"@{uname} はフォロー済みかボタンが見つかりません")
-                except Exception as e:
-                    logger.error(f"フォローエラー (@{uname}): {e}")
+                        self._safe_click(follow_button)
+                        followed_count += 1
+                        logger.info(
+                            f"@{uname} をフォロー ({followed_count}/{count}) "
+                            f"(フォロワー:{stats['followers']} フォロー:{stats['following']})"
+                        )
+                        self.followed_users[uname] = datetime.now().isoformat()
+                        self.save_followed_users()
 
-            logger.info(f"{followed_count}人をフォローしました")
-        except Exception as e:
-            logger.error(f"ハッシュタグ検索エラー: {e}")
+                        # 10人フォローごとに長めの休憑を入れる
+                        if followed_count % 10 == 0:
+                            logger.info(f"{followed_count}人完了。少し長めに休憩中...")
+                            self.human_like_action(30, 60)
+                        else:
+                            self.human_like_action(5, 12)
+
+                    except TimeoutException:
+                        logger.info(f"@{uname} はフォロー済みかボタンが見つかりません")
+                    except Exception as e:
+                        logger.error(f"フォローエラー (@{uname}): {e}")
+
+            except Exception as e:
+                logger.error(f"ハッシュタグ検索エラー ({current_hashtag}): {e}")
+
+        logger.info(f"合計{followed_count}人をフォローしました")
 
     def auto_like_by_keyword(self, keyword, count=10):
         try:
@@ -351,7 +379,7 @@ class TwitterAutomation:
         except Exception as e:
             logger.error(f"いいね処理エラー: {e}")
 
-    def unfollow_non_followers(self, days=3):
+    def unfollow_non_followers(self, days=7):
         cutoff_date = datetime.now() - timedelta(days=days)
         targets = [
             uname for uname, date_str in self.followed_users.items()
@@ -405,7 +433,18 @@ class TwitterAutomation:
         logger.info(f"{unfollow_count}人をアンフォローしました")
 
     def close(self):
-        self.driver.quit()
+        """10秒以内にブラウザを終了。失敗しても例外を出さない。"""
+        def _quit():
+            try:
+                self.driver.quit()
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_quit, daemon=True)
+        t.start()
+        t.join(timeout=10)
+        if t.is_alive():
+            logger.warning("ブラウザの終了がタイムアウトしました。Chromeプロセスは手動で終了してください。")
 
 
 TOPICS = [
@@ -426,9 +465,8 @@ TOPICS = [
     '信頼関係を再構築した夫婦が実践した具体的なコミュニケーション',
 ]
 
-# 「浮気されている・不安を持つ」当事者が実際に使うタグ（業者・コンサル系は除外）
+# 浮気を疑っている・不安を持つ」当事者が実際に使うタグ
 HASHTAGS = [
-    # 浮気を疑っている当事者が使うタグ
     '彼氏が怪しい',
     '旦那が怪しい',
     '彼氏の浮気',
@@ -436,7 +474,6 @@ HASHTAGS = [
     '浮気されてる',
     '浮気された',
     '不倫された',
-    # 不安・恋愛で悩んでいる人が使うタグ
     '彼氏冷たくなった',
     '彼氏信じたい',
     '恋愛がつらい',
@@ -447,18 +484,15 @@ HASHTAGS = [
 
 # 浮気を疑っている・不安を持つ人が実際につぶやく内容
 KEYWORDS = [
-    # 彼氏・旦那への疑惑
     '彼氏 最近 冷たい',
     '旦那 帰り 遅い 怪しい',
     '浮気 してるかな',
     '彼氏 嘘 ついてる',
     '返信 急に 遅くなった',
-    # 行動の変化への不安
     'スマホ 見せてくれない',
     '急に 優しくなった 怪しい',
     '残業 多すぎ 怪しい',
     '旦那 休日 どこ 行ってた',
-    # 心情・直感
     '信じたい でも 不安',
     '浮気 疑いたくない',
     '彼 最近 おかしい',
@@ -476,11 +510,11 @@ if __name__ == "__main__":
         bot.post_tweet(content)
 
         hashtag = random.choice(HASHTAGS)
-        bot.follow_by_hashtag(hashtag, count=5)
+        bot.follow_by_hashtag(hashtag, count=80)
 
         keyword = random.choice(KEYWORDS)
         bot.auto_like_by_keyword(keyword, count=10)
 
-        bot.unfollow_non_followers(days=3)
+        bot.unfollow_non_followers(days=7)
     finally:
         bot.close()
