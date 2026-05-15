@@ -44,7 +44,6 @@ class TwitterAutomation:
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--window-size=1280,900')
-        # Chromeが背景に回ってもスロットリングされないようにするフラグ
         options.add_argument('--disable-background-timer-throttling')
         options.add_argument('--disable-renderer-backgrounding')
         options.add_argument('--disable-backgrounding-occluded-windows')
@@ -150,7 +149,6 @@ class TwitterAutomation:
                 }]
             )
             content = response.content[0].text.strip()
-            # ハッシュタグが複数入っていたら指定の1つだけ残す
             content = re.sub(r'#\S+', '', content).strip()
             content = f"{content} {hashtag}"
             if len(content) > 140:
@@ -228,6 +226,9 @@ class TwitterAutomation:
         following = stats['following']
         if followers < 10:
             logger.info(f"@{uname} スキップ: フォロワー数が少なすぎます ({followers}人)")
+            return False
+        if followers > 2000:
+            logger.info(f"@{uname} スキップ: フォロワー数が多すぎます ({followers}人、業者/インフルエンサーの可能性)")
             return False
         if following > 8000:
             logger.info(f"@{uname} スキップ: フォロー数が多すぎます ({following}人)")
