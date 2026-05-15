@@ -170,6 +170,87 @@ class TwitterAutomation:
             safe_text = ''.join(c for c in text if ord(c) < 0x10000)
             element.send_keys(safe_text)
 
+    def _parse_count(self, text):
+        """'1,234' '1.2万' '1K' などをintに変換"""
+        if not text:
+            return 0
+        text = text.strip().replace(',', '').replace('件', '').replace(' ', '')
+        try:
+            if '万' in text:
+                return int(float(text.replace('万', '')) * 10000)
+            if text.upper().endswith('K'):
+                return int(float(text[:-1]) * 1000)
+            if text.upper().endswith('M'):
+                return int(float(text[:-1]) * 1000000)
+            return int(text)
+        except (ValueError, TypeError):
+            return 0
+
+    def _get_user_stats(self):
+        """現在表示中のプロフィールページからフォロワー数などを取得"""
+        stats = {'followers': 0, 'following': 0, 'has_bio': False}
+        try:
+            following_el = self.driver.find_element(
+                By.XPATH,
+                "//a[contains(@href, '/following')]//span[@data-testid='count' or (not(@class) and string-length(text())>0)][1]"
+            )
+            stats['following'] = self._parse_count(following_el.text)
+        except Exception:
+            pass
+        try:
+            followers_el = self.driver.find_element(
+                By.XPATH,
+                "//a[contains(@href, '/followers') and not(contains(@href, '/followers_you_follow'))]//span[@data-testid='count' or (not(@class) and string-length(text())>0)][1]"
+            )
+            stats['followers'] = self._parse_count(followers_el.text)
+        except Exception:
+            pass
+        try:
+            self.driver.find_element(By.XPATH, "//div[@data-testid='UserDescription']")
+            stats['has_bio'] = True
+        except NoSuchElementException:
+            pass
+        return stats
+
+    def _is_quality_account(self, stats, uname):
+        """スパム・bot・非アクティブアカウントを除外する"""
+        followers = stats['followers']
+        following = stats['following']
+
+        if followers < 20:
+            logger.info(f"@{uname} スキップ: フォロワー数が少なすぎます ({followers}人)")
+            return False
+        if following > 5000:
+            logger.info(f"@{uname} スキップ: フォロー数が多すぎます ({following}人) = スパム型")
+            return False
+        if followers > 0 and following / max(followers, 1) > 10:
+            logger.info(f"@{uname} スキップ: フォロー/フォロワー比が異常 ({following}/{followers})")
+            return False
+        if not stats['has_bio']:
+            logger.info(f"@{uname} スキップ: bioなし = 非アクティブアカウント")
+            return False
+        return True
+
+    def _like_recent_tweets(self, uname, count=2):
+        """プロフィールページで最新ツイートをいいねする（フォロー前の事前エンゲージ）"""
+        liked = 0
+        try:
+            like_buttons = self.driver.find_elements(
+                By.XPATH, "//button[@data-testid='like']"
+            )
+            for btn in like_buttons[:count]:
+                try:
+                    self._safe_click(btn)
+                    liked += 1
+                    self.human_like_action(1, 2)
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error(f"いいねエラー (@{uname}): {e}")
+        if liked > 0:
+            logger.info(f"@{uname} のツイートに{liked}件いいねしました（フォロー前）")
+        return liked
+
     def post_tweet(self, content):
         """ツイートを投稿する"""
         try:
@@ -197,7 +278,7 @@ class TwitterAutomation:
             logger.error(f"ツイート投稿エラー: {e}")
 
     def follow_by_hashtag(self, hashtag, count=5):
-        """ハッシュタグ検索結果のユーザーをフォローする"""
+        """ハッシュタグ検索結果のユーザーをフォローする（品質フィルタ付き）"""
         try:
             self.driver.get(
                 f"https://x.com/search?q=%23{hashtag}&src=typed_query&f=live"
@@ -234,6 +315,16 @@ class TwitterAutomation:
                     self.driver.get(f"https://x.com/{uname}")
                     self.human_like_action(2, 4)
 
+                    # --- 品質フィルタ ---
+                    stats = self._get_user_stats()
+                    if not self._is_quality_account(stats, uname):
+                        continue
+
+                    # --- フォロー前にいいね（事前エンゲージ）---
+                    self._like_recent_tweets(uname, count=2)
+                    self.human_like_action(1, 3)
+
+                    # --- フォロー ---
                     follow_button = self.wait.until(
                         EC.presence_of_element_located(
                             (By.XPATH,
@@ -241,11 +332,11 @@ class TwitterAutomation:
                         )
                     )
                     self._safe_click(follow_button)
-                    logger.info(f"@{uname} をフォローしました")
+                    logger.info(f"@{uname} をフォローしました (フォロワー:{stats['followers']} フォロー:{stats['following']})")
                     self.followed_users[uname] = datetime.now().isoformat()
                     self.save_followed_users()
                     followed_count += 1
-                    self.human_like_action(3, 7)
+                    self.human_like_action(4, 8)
                 except TimeoutException:
                     logger.info(f"@{uname} はフォロー済みかボタンが見つかりません")
                 except Exception as e:
@@ -276,8 +367,6 @@ class TwitterAutomation:
                 for button in like_buttons:
                     if liked_count >= count:
                         break
-                    # 同じボタンを何度も押さないように識別子で判定
-                    btn_id = button.get_attribute('aria-label') or ''
                     btn_key = id(button)
                     if btn_key in liked_ids:
                         continue
@@ -291,7 +380,6 @@ class TwitterAutomation:
                     except Exception as e:
                         logger.error(f"いいねエラー: {e}")
 
-                # 新たに押せたボタンが無ければスクロールして読み込み
                 self.driver.execute_script("window.scrollBy(0, 800);")
                 self.human_like_action(2, 3)
                 scroll_attempts += 1
@@ -388,17 +476,19 @@ TOPICS = [
 ]
 
 HASHTAGS = [
-    '浮気', '彼氏の浮気', '旦那の浮気', '浮気疑惑', '浮気調査',
-    '彼氏が不安', '遠距離恋愛不安', '恋人の行動が怪しい', 'line既読スルー不安',
-    '恋愛相談', '夫婦問題', '女性の悩み', '恋愛悩み',
-    '探偵', '離婚相談', 'カウンセリング', '女性の悩み解決',
+    # 具体的・ニッチ（スパムが少ない）
+    '浮気調査', '浮気疑惑', '旦那の浮気', '彼氏の浮気',
+    '不倫調査', '浮気確認', '浮気バレた',
+    # 悩み系（実際に困っている人が使う）
+    '彼氏が不安', '遠距離恋愛不安', '恋人の行動が怪しい',
+    '夫婦問題', '離婚相談', '恋愛相談',
 ]
 
 KEYWORDS = [
     '彼 怪しい', '浮気 かもしれない', 'スマホ 見せない',
-    'line 返信遅い', '週末 会えない', '出張 多い', '残業 頻繁',
+    'line 返信遅い', '週末 会えない', '出張 多い',
     '香水 変わった', '不安で眠れない', '信じられない',
-    '裏切られた気持ち', '疑心暗鬼', 'ストレス 恋愛',
+    '裏切られた気持ち', '疑心暗鬼',
 ]
 
 
@@ -413,7 +503,7 @@ if __name__ == "__main__":
         content = bot.generate_tweet_content(topic)
         bot.post_tweet(content)
 
-        # ランダムにハッシュタグを選んでフォロー
+        # ランダムにハッシュタグを選んでフォロー（品質フィルタ付き）
         hashtag = random.choice(HASHTAGS)
         bot.follow_by_hashtag(hashtag, count=5)
 
