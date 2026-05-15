@@ -254,7 +254,11 @@ class TwitterAutomation:
             logger.error(f"ツイート投稿エラー: {e}")
 
     def follow_by_hashtag(self, hashtag, count=80):
-        """80人を目標に、複数ハッシュタグを循環しながらスローリーにフォロー"""
+        """5時間かけてcount人をフォローする。
+        1人あたりの目標時間: 18000秒 / 80人 = 素4分/人
+        - 通常待機: 180-220秒（〥3分〆1人）
+        - 10人ごとの休憩: 300-360秒（〥5分）
+        """
         followed_count = 0
         hashtags_to_try = [hashtag] + random.sample(
             [h for h in HASHTAGS if h != hashtag],
@@ -319,12 +323,12 @@ class TwitterAutomation:
                         self.followed_users[uname] = datetime.now().isoformat()
                         self.save_followed_users()
 
-                        # 10人フォローごとに長めの休憑を入れる
+                        # 10人ごとに5分の長休憩、それ以外は3分待機（合計〥5時間で完了）
                         if followed_count % 10 == 0:
-                            logger.info(f"{followed_count}人完了。少し長めに休憩中...")
-                            self.human_like_action(30, 60)
+                            logger.info(f"{followed_count}人完了。長休憩中（5分前後）...")
+                            self.human_like_action(300, 360)
                         else:
-                            self.human_like_action(5, 12)
+                            self.human_like_action(180, 220)
 
                     except TimeoutException:
                         logger.info(f"@{uname} はフォロー済みかボタンが見つかりません")
@@ -433,7 +437,6 @@ class TwitterAutomation:
         logger.info(f"{unfollow_count}人をアンフォローしました")
 
     def close(self):
-        """10秒以内にブラウザを終了。失敗しても例外を出さない。"""
         def _quit():
             try:
                 self.driver.quit()
@@ -465,7 +468,6 @@ TOPICS = [
     '信頼関係を再構築した夫婦が実践した具体的なコミュニケーション',
 ]
 
-# 浮気を疑っている・不安を持つ」当事者が実際に使うタグ
 HASHTAGS = [
     '彼氏が怪しい',
     '旦那が怪しい',
@@ -482,7 +484,6 @@ HASHTAGS = [
     '恋愛不安',
 ]
 
-# 浮気を疑っている・不安を持つ人が実際につぶやく内容
 KEYWORDS = [
     '彼氏 最近 冷たい',
     '旦那 帰り 遅い 怪しい',
