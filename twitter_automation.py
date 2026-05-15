@@ -42,6 +42,8 @@ class TwitterAutomation:
         self.followed_users_file = "followed_users.json"
         self.load_followed_users()
 
+        os.makedirs("screenshots", exist_ok=True)
+
     def load_followed_users(self):
         try:
             with open(self.followed_users_file, 'r') as f:
@@ -57,6 +59,14 @@ class TwitterAutomation:
         wait_time = random.uniform(min_sec, max_sec)
         logger.info(f"{wait_time:.1f}秒待機中...")
         time.sleep(wait_time)
+
+    def _screenshot(self, name):
+        try:
+            path = f"screenshots/{name}.png"
+            self.driver.save_screenshot(path)
+            logger.info(f"スクリーンショット保存: {path}")
+        except Exception:
+            pass
 
     def _is_logged_in(self):
         try:
@@ -93,14 +103,10 @@ class TwitterAutomation:
                 remaining = wait_minutes - (i * check_interval) // 60
                 logger.info(f"ログイン待機中...（残り約{remaining}分）")
 
-        try:
-            self.driver.save_screenshot("login_timeout.png")
-        except Exception:
-            pass
+        self._screenshot("login_timeout")
         raise TimeoutException(f"{wait_minutes}分以内にログインが完了しませんでした。")
 
     def generate_tweet_content(self, topic):
-        """日本語140文字以内でツイートを生成し、超過時は切り捨てる"""
         try:
             response = self.anthropic_client.messages.create(
                 model="claude-sonnet-4-5",
@@ -235,59 +241,85 @@ class TwitterAutomation:
             logger.info(f"@{uname} のツイートに{liked}件いいねしました（フォロー前）")
         return liked
 
-    def _click_follow_button(self):
-        """フォローボタンを探してクリック。
-        Xのボタンの data-testid は '{user_id}-follow' / '{user_id}-unfollow' という動的な値。
-        なので contains() で末尾マッチをさせる。加えて複数のフォールバックを用意。
-        """
-        # まず 6秒全体でボタンの出現を待つ（フォローボタンの1つが見つかればオケー）
+    def _click_follow_button(self, uname):
+        """フォローボタンをクリックし、実際にフォロー成功したか検証する。"""
         primary_xpath = (
             "//button[contains(@data-testid, '-follow') "
             "and not(contains(@data-testid, 'unfollow'))]"
         )
         fallback_xpaths = [
-            # aria-label ベース（「@xxxさんをフォロー」など）
             "//button[@aria-label and contains(@aria-label, 'フォロー') "
             "and not(contains(@aria-label, 'フォロー中')) "
             "and not(contains(@aria-label, 'リクエスト'))]",
-            # プロフィールのヘッダー内にあるボタン
             "//div[@data-testid='primaryColumn']//button[.//span[text()='フォロー']]",
-            # 今までのレガシーパターン
             "//div[@data-testid='placementTracking']//button[.//span[text()='フォロー']]",
         ]
 
+        clicked = False
         try:
             btn = WebDriverWait(self.driver, 6).until(
                 EC.element_to_be_clickable((By.XPATH, primary_xpath))
             )
             self._safe_click(btn)
-            return True
+            clicked = True
         except Exception:
             pass
 
-        # フォールバックは即時検索のみ（各 0.5秒以内）
-        for xpath in fallback_xpaths:
-            try:
-                elems = self.driver.find_elements(By.XPATH, xpath)
-                for elem in elems:
-                    if elem.is_displayed() and elem.is_enabled():
-                        self._safe_click(elem)
-                        return True
-            except Exception:
-                continue
+        if not clicked:
+            for xpath in fallback_xpaths:
+                try:
+                    elems = self.driver.find_elements(By.XPATH, xpath)
+                    for elem in elems:
+                        if elem.is_displayed() and elem.is_enabled():
+                            self._safe_click(elem)
+                            clicked = True
+                            break
+                except Exception:
+                    continue
+                if clicked:
+                    break
 
-        # すでにフォロー中かどうか判定しログを出す
+        if not clicked:
+            # フォローボタンが見つからない = 既フォロー中かブロック
+            self._screenshot(f"no_follow_btn_{uname}")
+            try:
+                already = self.driver.find_elements(
+                    By.XPATH,
+                    "//button[contains(@data-testid, '-unfollow')] | "
+                    "//button[@aria-label and contains(@aria-label, 'フォロー中')]"
+                )
+                if already:
+                    return 'already_following'
+            except Exception:
+                pass
+            return False
+
+        # クリック後 2秒待ってボタン状態変化を確認
+        time.sleep(2)
+        self._screenshot(f"after_follow_{uname}")
+
+        # フォロー成功確認: unfollow ボタンが出現したならOK
         try:
-            already = self.driver.find_elements(
+            confirmed = self.driver.find_elements(
                 By.XPATH,
                 "//button[contains(@data-testid, '-unfollow')] | "
                 "//button[@aria-label and contains(@aria-label, 'フォロー中')]"
             )
-            if already:
-                return 'already_following'
+            if confirmed:
+                return True
         except Exception:
             pass
-        return False
+
+        # フォローボタンがまだ居る = クリックが失敗した可能性
+        try:
+            still_follow = self.driver.find_elements(By.XPATH, primary_xpath)
+            if still_follow:
+                logger.warning(f"@{uname} フォローボタンがまだ存在→クリック失敗の可能性")
+                return False
+        except Exception:
+            pass
+
+        return True
 
     def post_tweet(self, content):
         try:
@@ -361,11 +393,11 @@ class TwitterAutomation:
                         self._like_recent_tweets(uname, count=2)
                         self.human_like_action(1, 3)
 
-                        result = self._click_follow_button()
+                        result = self._click_follow_button(uname)
                         if result is True:
                             followed_count += 1
                             logger.info(
-                                f"@{uname} をフォロー ({followed_count}/{count}) "
+                                f"@{uname} をフォロー成功 ({followed_count}/{count}) "
                                 f"(フォロワー:{stats['followers']} フォロー:{stats['following']})"
                             )
                             self.followed_users[uname] = datetime.now().isoformat()
@@ -377,11 +409,11 @@ class TwitterAutomation:
                             else:
                                 self.human_like_action(180, 220)
                         elif result == 'already_following':
-                            logger.info(f"@{uname} すでにフォロー中。キャッシュしてスキップ")
+                            logger.info(f"@{uname} 既にフォロー中。キャッシュ")
                             self.followed_users[uname] = datetime.now().isoformat()
                             self.save_followed_users()
                         else:
-                            logger.warning(f"@{uname} フォローボタンが見つかりません（ブロック/非公開等の可能性）")
+                            logger.warning(f"@{uname} フォロー失敗。screenshots/after_follow_{uname}.png を確認してください")
 
                     except Exception as e:
                         logger.error(f"フォローエラー (@{uname}): {e}")
@@ -456,7 +488,6 @@ class TwitterAutomation:
                 except NoSuchElementException:
                     pass
 
-                # アンフォローボタンも data-testid='{user_id}-unfollow' 形式
                 unfollow_xpaths = [
                     "//button[contains(@data-testid, '-unfollow')]",
                     "//button[.//span[normalize-space(text())='フォロー中']]",
