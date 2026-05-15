@@ -97,41 +97,42 @@ class TwitterAutomation:
             self.driver.save_screenshot("login_timeout.png")
         except Exception:
             pass
-        raise TimeoutException(f"{wait_minutes}分以内にログインが完了しまた。再実行してログインしてください。")
+        raise TimeoutException(f"{wait_minutes}分以内にログインが完了しませんでした。")
 
     def generate_tweet_content(self, topic):
-        """240文字以内でツイートを生成し、超過時は切り捨てる"""
+        """日本語140文字以内でツイートを生成し、超過時は切り捨てる"""
         try:
             response = self.anthropic_client.messages.create(
                 model="claude-sonnet-4-5",
-                max_tokens=300,
+                max_tokens=200,
                 system=(
                     "あなたは恋愛・パートナーシップの悩みに寄り添うアドバイザーです。"
                     "浮気の不安や疑惑を抄える人の気持ちに共感しながら、"
                     "寄り添いかつ前向きなトーンでツイートを作成してください。"
-                    "「必ず240文字以内」に収めること。業者・広告っぽくならないこと。"
+                    "「必ず130文字以内」に収めること（ハッシュタグ含めて）。業者・広告っぽくならないこと。"
                 ),
                 messages=[{
                     "role": "user",
                     "content": (
-                        f"次のトピックに関するハッシュタグを含むつぶやきを生成してください: {topic}\n\n"
+                        f"次のトピックに関するつぶやきを生成: {topic}\n\n"
                         "ルール:\n"
-                        "- 【必須】240文字以内（超過絶対不可）\n"
+                        "- 【必須】130文字以内（ハッシュタグ含めて、超過絶対不可）\n"
                         "- ターゲット層：パートナーへの不安・浮気の悩みを持つ人\n"
                         "- トーン：共感的、親しみやすい、前向き\n"
-                        "- 関連するハッシュタグを含める\n"
+                        "- 関連するハッシュタグを1～2個含める\n"
                         "- 業者・広告のような文体は避ける"
                     )
                 }]
             )
             content = response.content[0].text.strip()
-            if len(content) > 280:
-                content = content[:276] + '...'
+            # 日本語140文字超過の安全切り捨て
+            if len(content) > 140:
+                content = content[:137] + '...'
             logger.info(f"生成ツイート({len(content)}文字): {content[:50]}...")
             return content
         except Exception as e:
             logger.error(f"ツイート生成エラー: {e}")
-            return f"今日の{topic}について考えてみました。 #恋愛相談 #恋愛不安"
+            return f"今日の{topic[:20]}について考える。 #恋愛相談"
 
     def _safe_click(self, element):
         try:
@@ -166,23 +167,34 @@ class TwitterAutomation:
             return 0
 
     def _get_user_stats(self):
+        """プロフィールページからフォロワー/フォロー数を取得。
+        Xの新仕様で/verified_followersなどURLは多様なため、テキストベースで探す。
+        """
         stats = {'followers': 0, 'following': 0, 'has_bio': False}
+
+        # ステット関連のリンクをすべて取得し、テキストを見て判定
         try:
-            following_el = self.driver.find_element(
+            stat_links = self.driver.find_elements(
                 By.XPATH,
-                "//a[contains(@href, '/following')]//span[@data-testid='count' or (not(@class) and string-length(text())>0)][1]"
+                "//a[contains(@href, '/following') or contains(@href, '/followers') or contains(@href, '/verified_followers')]"
             )
-            stats['following'] = self._parse_count(following_el.text)
-        except Exception:
-            pass
-        try:
-            followers_el = self.driver.find_element(
-                By.XPATH,
-                "//a[contains(@href, '/followers') and not(contains(@href, '/followers_you_follow'))]//span[@data-testid='count' or (not(@class) and string-length(text())>0)][1]"
-            )
-            stats['followers'] = self._parse_count(followers_el.text)
-        except Exception:
-            pass
+            for link in stat_links:
+                href = link.get_attribute('href') or ''
+                # /followers_you_followは除外
+                if '/followers_you_follow' in href:
+                    continue
+                text = link.text or ''
+                if not text:
+                    continue
+                # テキスト例: "123\nフォロワー" または "1.2万 フォロワー"
+                num_text = text.replace('\n', ' ').split()[0] if text.strip() else ''
+                if 'フォロワー' in text or 'Followers' in text:
+                    stats['followers'] = self._parse_count(num_text)
+                elif 'フォロー中' in text or 'Following' in text:
+                    stats['following'] = self._parse_count(num_text)
+        except Exception as e:
+            logger.debug(f"stats取得エラー: {e}")
+
         try:
             self.driver.find_element(By.XPATH, "//div[@data-testid='UserDescription']")
             stats['has_bio'] = True
@@ -208,7 +220,6 @@ class TwitterAutomation:
         return True
 
     def _like_recent_tweets(self, uname, count=2):
-        """profileページのツイート記事内のいいねボタンを正確に指定してフォロー前にいいね"""
         liked = 0
         try:
             self.wait.until(
@@ -251,11 +262,6 @@ class TwitterAutomation:
             logger.error(f"ツイート投稿エラー: {e}")
 
     def follow_by_keyword_search(self, keyword, count=80):
-        """KEYWORDSの組み合わせ検索で悩みを持つ個人アカウントをフォロー。
-        5時間でcount人完了 = 1人あたり素4分
-        - 通常待機: 180-220秒
-        - 10人ごとの休憩: 300-360秒
-        """
         followed_count = 0
         keywords_to_try = [keyword] + random.sample(
             [k for k in KEYWORDS if k != keyword],
@@ -267,16 +273,13 @@ class TwitterAutomation:
                 break
             try:
                 query = current_keyword.replace(' ', '%20')
-                self.driver.get(
-                    f"https://x.com/search?q={query}&src=typed_query&f=live"
-                )
+                self.driver.get(f"https://x.com/search?q={query}&src=typed_query&f=live")
                 self.human_like_action(3, 5)
 
                 for _ in range(5):
                     self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                     self.human_like_action(2, 3)
 
-                # article内に絞り込んでツイート投稿者のみ取得
                 user_links = self.driver.find_elements(
                     By.XPATH,
                     "//article[@data-testid='tweet']//div[@data-testid='User-Name']//a[contains(@href, '/') and not(contains(@href, '/status/'))]"
@@ -303,6 +306,7 @@ class TwitterAutomation:
                         self.human_like_action(2, 4)
 
                         stats = self._get_user_stats()
+                        logger.info(f"@{uname} ステット: フォロワー={stats['followers']} フォロー={stats['following']} bio={stats['has_bio']}")
                         if not self._is_quality_account(stats, uname):
                             continue
 
@@ -444,7 +448,7 @@ class TwitterAutomation:
         t.start()
         t.join(timeout=10)
         if t.is_alive():
-            logger.warning("ブラウザの終了がタイムアウトしました。Chromeプロセスは手動で終了してください。")
+            logger.warning("ブラウザの終了がタイムアウトしました。")
 
 
 TOPICS = [
@@ -474,7 +478,7 @@ KEYWORDS = [
     '残業 多すぎ 怪しい',
     '旦那 休日 どこ 行ってた',
     '信じたい でも 不安',
-    '浮気 疑いたくない',
+    '浮気 疑いたくなった',
     '彼 最近 おかしい',
 ]
 
