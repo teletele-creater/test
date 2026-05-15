@@ -32,6 +32,11 @@ class TwitterAutomation:
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--window-size=1280,900')
+        # Chromeが背景に回ってもスロットリングされないようにするフラグ
+        options.add_argument('--disable-background-timer-throttling')
+        options.add_argument('--disable-renderer-backgrounding')
+        options.add_argument('--disable-backgrounding-occluded-windows')
+        options.add_argument('--disable-features=CalculateNativeWinOcclusion')
 
         self.driver = uc.Chrome(options=options, headless=headless, use_subprocess=True)
         self.wait = WebDriverWait(self.driver, 30)
@@ -280,7 +285,6 @@ class TwitterAutomation:
                     break
 
         if not clicked:
-            # フォローボタンが見つからない = 既フォロー中かブロック
             self._screenshot(f"no_follow_btn_{uname}")
             try:
                 already = self.driver.find_elements(
@@ -294,11 +298,9 @@ class TwitterAutomation:
                 pass
             return False
 
-        # クリック後 2秒待ってボタン状態変化を確認
         time.sleep(2)
         self._screenshot(f"after_follow_{uname}")
 
-        # フォロー成功確認: unfollow ボタンが出現したならOK
         try:
             confirmed = self.driver.find_elements(
                 By.XPATH,
@@ -310,7 +312,6 @@ class TwitterAutomation:
         except Exception:
             pass
 
-        # フォローボタンがまだ居る = クリックが失敗した可能性
         try:
             still_follow = self.driver.find_elements(By.XPATH, primary_xpath)
             if still_follow:
